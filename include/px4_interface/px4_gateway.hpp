@@ -2,6 +2,9 @@
 #include "px4_comm_types.hpp"
 #include "px4_msgs_cache.hpp"
 #include <memory>
+#include <px4_interface/msg/battery_status.hpp>
+#include <px4_interface/msg/position_ned.hpp>
+#include <px4_interface/msg/vehicle_status.hpp>
 #include <px4_msgs/msg/battery_status.hpp>
 #include <px4_msgs/msg/offboard_control_mode.hpp>
 #include <px4_msgs/msg/trajectory_setpoint.hpp>
@@ -111,11 +114,11 @@ private:
       vehicle_command_publisher_;
 
   // 发布给外部的发布者
-  rclcpp::Publisher<px4Status::VehicleStatus>::SharedPtr
+  rclcpp::Publisher<px4_interface::msg::VehicleStatus>::SharedPtr
       vehicle_status_publisher_;
-  rclcpp::Publisher<px4Position::PositionNED>::SharedPtr
+  rclcpp::Publisher<px4_interface::msg::PositionNED>::SharedPtr
       vehicle_local_position_publisher_;
-  rclcpp::Publisher<px4Status::BatteryStatus>::SharedPtr
+  rclcpp::Publisher<px4_interface::msg::BatteryStatus>::SharedPtr
       battery_status_publisher_;
 
   // PX4消息缓存

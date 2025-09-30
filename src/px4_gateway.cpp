@@ -36,18 +36,39 @@ bool PX4Gateway::checkPx4Publishers() const {
   return true;
 }
 
-void PX4Gateway::publishCache() const {
+void PX4Gateway::publishCache() const { // Todo: 代码重复率过高，考虑优化
   auto status = px4_msgs_cache_->getVehicleStatus();
   if (status.valid) {
-    vehicle_status_publisher_->publish(status);
+    px4_interface::msg::VehicleStatus msg;
+    msg.valid = status.valid;
+    msg.latest_timestamp = status.latest_timestamp;
+    msg.arming_state = status.arming_state;
+    msg.nav_state = status.nav_state;
+    msg.failsafe = status.failsafe;
+    msg.pre_flight_checks_pass = status.pre_flight_checks_pass;
+    vehicle_status_publisher_->publish(msg);
   }
   auto position = px4_msgs_cache_->getPositionNED();
   if (position.valid) {
-    vehicle_local_position_publisher_->publish(position);
+    px4_interface::msg::PositionNED msg;
+    msg.valid = position.valid;
+    msg.translation = {position.translation.x(), position.translation.y(),
+                       position.translation.z()};
+    msg.orientation = {position.orientation.w(), position.orientation.x(),
+                       position.orientation.y(), position.orientation.z()};
+    msg.timestamp = position.timestamp;
+    vehicle_local_position_publisher_->publish(msg);
   }
   auto battery = px4_msgs_cache_->getBatteryStatus();
   if (battery.valid) {
-    battery_status_publisher_->publish(battery);
+    px4_interface::msg::BatteryStatus msg;
+    msg.valid = battery.valid;
+    msg.timestamp = battery.timestamp;
+    msg.voltage_v = battery.voltage_v;
+    msg.current_a = battery.current_a;
+    msg.remaining = battery.remaining;
+    msg.warning = battery.warning;
+    battery_status_publisher_->publish(msg);
   }
 }
 
@@ -58,7 +79,8 @@ void PX4Gateway::chooseControlMethod(bool position_control,
 }
 
 void PX4Gateway::setTarget(const px4GatewayTypes::setpoint &target) {
-  px4_msgs::msg::TrajectorySetpoint traj_setpoint_msg;
+  px4_msgs::msg::TrajectorySetpoint
+      traj_setpoint_msg; // Todo: 优化，这里的转化过于机械
   traj_setpoint_msg.position[0] = target.position[0];
   traj_setpoint_msg.position[1] = target.position[1];
   traj_setpoint_msg.position[2] = target.position[2];
@@ -132,13 +154,15 @@ void PX4Gateway::init() {
           "/fmu/in/vehicle_command", 10); // 发布车辆控制命令
 
   // 提供给外部的发布者
-  vehicle_status_publisher_ = this->create_publisher<px4Status::VehicleStatus>(
-      "/cache/vehicle_status", 10);
+  vehicle_status_publisher_ =
+      this->create_publisher<px4_interface::msg::VehicleStatus>(
+          "/cache/vehicle_status", 10);
   vehicle_local_position_publisher_ =
-      this->create_publisher<px4Position::PositionNED>(
+      this->create_publisher<px4_interface::msg::PositionNED>(
           "/cache/vehicle_local_position", 10);
-  battery_status_publisher_ = this->create_publisher<px4Status::BatteryStatus>(
-      "/cache/battery_status", 10);
+  battery_status_publisher_ =
+      this->create_publisher<px4_interface::msg::BatteryStatus>(
+          "/cache/battery_status", 10);
 
   // 创建订阅者
   auto qos_profile = rclcpp::SystemDefaultsQoS();

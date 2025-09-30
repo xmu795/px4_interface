@@ -11,9 +11,17 @@ find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(px4_msgs REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
+
+rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/VehicleStatus.msg"
+  "msg/PositionNED.msg"
+  "msg/BatteryStatus.msg"
+  DEPENDENCIES builtin_interfaces
+)
 
 # include directories
-include_directories(include)
+include_directories(include ${CMAKE_CURRENT_BINARY_DIR}/rosidl_generator_cpp)
 
 # Create the px4_msgs_cache library
 add_library(px4_msgs_cache src/px4_msgs_cache.cpp)
@@ -23,7 +31,7 @@ target_include_directories(px4_msgs_cache PUBLIC
     ${EIGEN3_INCLUDE_DIR} # Eigen3 include directory
 )
 target_link_libraries(px4_msgs_cache ${rclcpp_LIBRARIES})
-ament_target_dependencies(px4_msgs_cache rclcpp std_msgs Eigen3)
+ament_target_dependencies(px4_msgs_cache rclcpp std_msgs Eigen3 rosidl_default_runtime)
 
 # Create the px4_gateway library
 add_library(px4_gateway src/px4_gateway.cpp)
@@ -33,7 +41,7 @@ target_include_directories(px4_gateway PUBLIC
     ${EIGEN3_INCLUDE_DIR} # Eigen3 include directory
 )
 target_link_libraries(px4_gateway px4_msgs_cache ${rclcpp_LIBRARIES})
-ament_target_dependencies(px4_gateway rclcpp std_msgs Eigen3 px4_msgs)
+ament_target_dependencies(px4_gateway rclcpp std_msgs Eigen3 px4_msgs rosidl_default_runtime)
 
 # Install targets
 install(TARGETS px4_msgs_cache px4_gateway
