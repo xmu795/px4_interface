@@ -1,5 +1,5 @@
 bool valid
-builtin_interfaces/Time latest_timestamp
+builtin_interfaces/Time timestamp
 uint8 arming_state
 uint8 nav_state
 bool failsafe

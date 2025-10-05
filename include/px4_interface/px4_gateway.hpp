@@ -1,13 +1,13 @@
 #pragma once
 #include <memory>
 #include <px4_interface/msg/battery_status.hpp>
-#include <px4_interface/msg/position_ned.hpp>
+#include <px4_interface/msg/pose_ned.hpp>
 #include <px4_interface/msg/vehicle_status.hpp>
 #include <px4_msgs/msg/battery_status.hpp>
 #include <px4_msgs/msg/offboard_control_mode.hpp>
 #include <px4_msgs/msg/trajectory_setpoint.hpp>
 #include <px4_msgs/msg/vehicle_command.hpp>
-#include <px4_msgs/msg/vehicle_local_position.hpp>
+#include <px4_msgs/msg/vehicle_odometry.hpp>
 #include <px4_msgs/msg/vehicle_status.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <string>
@@ -96,13 +96,36 @@ class PX4Gateway : public rclcpp::Node {
   void publishOffboardControlMode(const bool position_control = true,
                                   const bool velocity_control = true);
 
+  /**
+   * @brief PX4 原始时间戳与本地接收时间戳的聚合结构体
+   * @details
+   * PX4 消息中的 timestamp 字段单位为微秒，需要转换为 ROS 2 Time，同时保留本地
+   * 节点的接收时刻，方便后续进行数据新鲜度判断与缓存记录。
+   */
+  struct Px4Timestamps {
+    rclcpp::Time msg_timestamp;  ///< PX4 消息携带的时间戳（转换为 ROS Time）
+    rclcpp::Time received_timestamp;  ///< 本地节点接收到消息的时间戳
+  };
+
+  /**
+   * @brief 统一处理 PX4 时间戳的转换与有效性校验
+   * @param px4_timestamp_us PX4 消息内的时间戳（单位：微秒）
+   * @param topic_name 用于日志输出的主题名
+   * @param tolerance 允许的时间偏差范围，超出则输出告警
+   * @return Px4Timestamps 包含消息时间与本地接收时间
+   * @note 会根据当前节点使用的 Clock 类型创建 rclcpp::Time，避免跨 Clock 比较
+   */
+  [[nodiscard]] Px4Timestamps processPx4Timestamp(
+      uint64_t px4_timestamp_us, const char *topic_name,
+      rclcpp::Duration tolerance = rclcpp::Duration::from_seconds(1.0)) const;
+
   //===============成员变量===============
 
   // 订阅PX4的订阅者
   rclcpp::Subscription<px4_msgs::msg::VehicleStatus>::SharedPtr
       vehicle_status_subscriber_;
-  rclcpp::Subscription<px4_msgs::msg::VehicleLocalPosition>::SharedPtr
-      vehicle_local_position_subscriber_;
+  rclcpp::Subscription<px4_msgs::msg::VehicleOdometry>::SharedPtr
+      vehicle_odometry_subscriber_;
   rclcpp::Subscription<px4_msgs::msg::BatteryStatus>::SharedPtr
       battery_status_subscriber_;
 
@@ -117,8 +140,8 @@ class PX4Gateway : public rclcpp::Node {
   // 发布给外部的发布者
   rclcpp::Publisher<px4_interface::msg::VehicleStatus>::SharedPtr
       vehicle_status_publisher_;
-  rclcpp::Publisher<px4_interface::msg::PositionNED>::SharedPtr
-      vehicle_local_position_publisher_;
+  rclcpp::Publisher<px4_interface::msg::PoseNED>::SharedPtr
+      vehicle_odometry_publisher_;
   rclcpp::Publisher<px4_interface::msg::BatteryStatus>::SharedPtr
       battery_status_publisher_;
 

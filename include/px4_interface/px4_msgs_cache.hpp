@@ -66,7 +66,7 @@ class Px4MsgsCache {
    * @details
    * 使用ThreadSafeCache模板存储无人机在North-East-Down坐标系中的位置信息
    */
-  ThreadSafeCache<px4Position::PositionNED> position_ned_cache_;
+  ThreadSafeCache<px4Status::VehiclePose> vehicle_pose_cache_;
 
   /**
    * @brief PX4的电池状态数据缓存
@@ -93,7 +93,7 @@ class Px4MsgsCache {
    * @details 线程安全地更新位置缓存
    * @note 该操作通过ThreadSafeCache模板自动保证线程安全
    */
-  void updatePositionNED(const px4Position::PositionNED &new_position);
+  void updateVehiclePose(const px4Status::VehiclePose &new_position);
 
   /**
    * @brief 更新电池状态数据
@@ -113,11 +113,11 @@ class Px4MsgsCache {
 
   /**
    * @brief 获取当前NED坐标系位置数据
-   * @return px4Position::PositionNED 当前的位置数据副本
+   * @return 当前的位置数据副本
    * @details 线程安全地读取位置缓存
    * @note 该操作通过ThreadSafeCache模板自动保证线程安全，返回数据的副本
    */
-  px4Position::PositionNED getPositionNED() const;
+  px4Status::VehiclePose getVehiclePose() const;
 
   /**
    * @brief 获取当前电池状态数据
@@ -143,9 +143,9 @@ class Px4MsgsCache {
    * @details 提供线程安全的函数式访问接口，允许在持有锁的情况下对数据进行操作
    */
   template <typename F>
-  auto accessPositionNED(F &&func) const
-      -> decltype(func(std::declval<px4Position::PositionNED>())) {
-    return position_ned_cache_.access(std::forward<F>(func));
+  auto accessVehiclePose(F &&func) const
+      -> decltype(func(std::declval<px4Status::VehiclePose>())) {
+    return vehicle_pose_cache_.access(std::forward<F>(func));
   }
 
   /**

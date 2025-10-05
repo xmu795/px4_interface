@@ -29,6 +29,7 @@ struct BasicPosition {
   Eigen::Vector3d translation;     // 位置 (m)
   Eigen::Quaterniond orientation;  // 姿态 (四元数)
   rclcpp::Time timestamp;          // 时间戳
+  // 坐标系类型标签
   using FrameType = Frame;
 
   /**
@@ -52,7 +53,6 @@ struct BasicPosition {
    * @brief 将四元数转换为欧拉角 (roll, pitch, yaw)
    * @warning 欧拉角存在万向锁问题,仅用于调试和显示,不要用于控制计算
    */
-
   Eigen::Vector3d toEuler() const {
     return orientation.toRotationMatrix().eulerAngles(0, 1, 2);
   }
@@ -116,7 +116,8 @@ namespace px4Status {
  */
 struct VehicleStatus {
   bool valid = false;                   // 数据是否有效
-  rclcpp::Time latest_timestamp;        // 时间戳
+  rclcpp::Time latest_timestamp;        // 收到数据的时间戳
+  rclcpp::Time msg_timestamp;           // 消息自带的时间戳
   uint8_t arming_state = 0;             // 解锁状态, 1: DISARMED, 2: ARMED
   uint8_t nav_state = 0;                // 导航状态, 见PX4文档
   bool failsafe = false;                // 是否处于故障保护状态
@@ -127,12 +128,26 @@ struct VehicleStatus {
  * @brief 实用的电池状态缓存，包含了做决策所需的核心信息
  */
 struct BatteryStatus {
-  bool valid = false;      // 数据是否有效
-  rclcpp::Time timestamp;  // 最新数据的时间戳
-  float voltage_v = 0.0f;  // [V] 电池电压
-  float current_a = 0.0f;  // [A] 当前电流，可以判断负载情况
+  bool valid = false;          // 数据是否有效
+  rclcpp::Time timestamp;      // 受到数据的时间戳
+  rclcpp::Time msg_timestamp;  // 消息自带的时间戳
+  float voltage_v = 0.0f;      // [V] 电池电压
+  float current_a = 0.0f;      // [A] 当前电流，可以判断负载情况
   float remaining = 0.0f;  // [0.0 to 1.0] 剩余电量百分比，重要指标
   uint8_t warning = 0;  // 警告状态 (来自PX4的WARNING_NONE, LOW, CRITICAL等)
+};
+
+/**
+ *@brief 车辆位姿的简化表示
+ */
+struct VehiclePose {
+  bool valid = false;             // 数据是否有效
+  rclcpp::Time latest_timestamp;  // 收到数据的时间戳
+  rclcpp::Time msg_timestamp;     // 消息自带的时间戳
+  Eigen::Vector3d position = Eigen::Vector3d::Zero();  // 位置 (m)
+  Eigen::Vector3d velocity = Eigen::Vector3d::Zero();  // 速度 (m/s)
+  Eigen::Quaterniond orientation =
+      Eigen::Quaterniond::Identity();  // 姿态 (四元数)
 };
 }  // namespace px4Status
 

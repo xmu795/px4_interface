@@ -14,19 +14,33 @@ class Px4MsgsCacheTest : public ::testing::Test {
   void SetUp() override {
     cache_ = std::make_unique<Px4MsgsCache>();
     // 创建测试数据
-    createTestPositionNED();
+    createTestVehiclePose();
     createTestBatteryStatus();
     createTestVehicleStatus();
   }
 
   void TearDown() override { cache_.reset(); }
 
-  void createTestPositionNED() {
-    Eigen::Vector3d translation(1.0, 2.0, 3.0);
+  static px4Status::VehiclePose makeVehiclePose(
+      const Eigen::Vector3d& position, const Eigen::Quaterniond& orientation,
+      const rclcpp::Time& timestamp,
+      const Eigen::Vector3d& velocity = Eigen::Vector3d::Zero()) {
+    px4Status::VehiclePose pose;
+    pose.valid = true;
+    pose.position = position;
+    pose.velocity = velocity;
+    pose.orientation = orientation;
+    pose.latest_timestamp = timestamp;
+    pose.msg_timestamp = timestamp;
+    return pose;
+  }
+
+  void createTestVehiclePose() {
+    Eigen::Vector3d position(1.0, 2.0, 3.0);
+    Eigen::Vector3d velocity(0.1, 0.2, 0.3);
     Eigen::Quaterniond orientation(1.0, 0.0, 0.0, 0.0);
     rclcpp::Time timestamp = rclcpp::Clock().now();
-    test_position_ =
-        px4Position::PositionNED(translation, orientation, timestamp);
+    test_pose_ = makeVehiclePose(position, orientation, timestamp, velocity);
   }
 
   void createTestBatteryStatus() {
@@ -48,7 +62,7 @@ class Px4MsgsCacheTest : public ::testing::Test {
   }
 
   std::unique_ptr<Px4MsgsCache> cache_;
-  px4Position::PositionNED test_position_;
+  px4Status::VehiclePose test_pose_;
   px4Status::BatteryStatus test_battery_;
   px4Status::VehicleStatus test_vehicle_;
 };
@@ -56,14 +70,17 @@ class Px4MsgsCacheTest : public ::testing::Test {
 // 基本功能测试
 TEST_F(Px4MsgsCacheTest, BasicUpdateAndGet) {
   // 测试位置数据
-  cache_->updatePositionNED(test_position_);
-  auto retrieved_position = cache_->getPositionNED();
+  cache_->updateVehiclePose(test_pose_);
+  auto retrieved_pose = cache_->getVehiclePose();
 
-  EXPECT_TRUE(retrieved_position.valid);
-  EXPECT_DOUBLE_EQ(retrieved_position.translation.x(), 1.0);
-  EXPECT_DOUBLE_EQ(retrieved_position.translation.y(), 2.0);
-  EXPECT_DOUBLE_EQ(retrieved_position.translation.z(), 3.0);
-  EXPECT_DOUBLE_EQ(retrieved_position.orientation.w(), 1.0);
+  EXPECT_TRUE(retrieved_pose.valid);
+  EXPECT_DOUBLE_EQ(retrieved_pose.position.x(), 1.0);
+  EXPECT_DOUBLE_EQ(retrieved_pose.position.y(), 2.0);
+  EXPECT_DOUBLE_EQ(retrieved_pose.position.z(), 3.0);
+  EXPECT_DOUBLE_EQ(retrieved_pose.orientation.w(), 1.0);
+  EXPECT_DOUBLE_EQ(retrieved_pose.velocity.x(), 0.1);
+  EXPECT_DOUBLE_EQ(retrieved_pose.velocity.y(), 0.2);
+  EXPECT_DOUBLE_EQ(retrieved_pose.velocity.z(), 0.3);
 
   // 测试电池状态数据
   cache_->updateBatteryStatus(test_battery_);
@@ -88,11 +105,11 @@ TEST_F(Px4MsgsCacheTest, BasicUpdateAndGet) {
 
 // 测试初始状态
 TEST_F(Px4MsgsCacheTest, InitialState) {
-  auto position = cache_->getPositionNED();
+  auto pose = cache_->getVehiclePose();
   auto battery = cache_->getBatteryStatus();
   auto vehicle = cache_->getVehicleStatus();
 
-  EXPECT_FALSE(position.valid);
+  EXPECT_FALSE(pose.valid);
   EXPECT_FALSE(battery.valid);
   EXPECT_FALSE(vehicle.valid);
 }
@@ -104,14 +121,14 @@ TEST_F(Px4MsgsCacheTest, MultipleUpdates) {
     Eigen::Vector3d translation(i, i + 1, i + 2);
     Eigen::Quaterniond orientation(1.0, 0.0, 0.0, 0.0);
     rclcpp::Time timestamp = rclcpp::Clock().now();
-    px4Position::PositionNED position(translation, orientation, timestamp);
+    auto pose = makeVehiclePose(translation, orientation, timestamp);
 
-    cache_->updatePositionNED(position);
+    cache_->updateVehiclePose(pose);
 
-    auto retrieved = cache_->getPositionNED();
-    EXPECT_DOUBLE_EQ(retrieved.translation.x(), i);
-    EXPECT_DOUBLE_EQ(retrieved.translation.y(), i + 1);
-    EXPECT_DOUBLE_EQ(retrieved.translation.z(), i + 2);
+    auto retrieved = cache_->getVehiclePose();
+    EXPECT_DOUBLE_EQ(retrieved.position.x(), i);
+    EXPECT_DOUBLE_EQ(retrieved.position.y(), i + 1);
+    EXPECT_DOUBLE_EQ(retrieved.position.z(), i + 2);
   }
 }
 
@@ -121,37 +138,37 @@ TEST_F(Px4MsgsCacheTest, ConcurrentReadWrite) {
   std::atomic<bool> test_failed{false};
 
   // 写线程
-  auto writer = std::async(std::launch::async, [this, num_iterations,
-                                                &test_failed]() {
-    for (int i = 0; i < num_iterations; ++i) {
-      try {
-        Eigen::Vector3d translation(i, i + 1, i + 2);
-        Eigen::Quaterniond orientation(1.0, 0.0, 0.0, 0.0);
-        rclcpp::Time timestamp = rclcpp::Clock().now();
-        px4Position::PositionNED position(translation, orientation, timestamp);
+  auto writer =
+      std::async(std::launch::async, [this, num_iterations, &test_failed]() {
+        for (int i = 0; i < num_iterations; ++i) {
+          try {
+            Eigen::Vector3d translation(i, i + 1, i + 2);
+            Eigen::Quaterniond orientation(1.0, 0.0, 0.0, 0.0);
+            rclcpp::Time timestamp = rclcpp::Clock().now();
+            auto pose = makeVehiclePose(translation, orientation, timestamp);
 
-        cache_->updatePositionNED(position);
+            cache_->updateVehiclePose(pose);
 
-        // 短暂延迟以增加竞态条件的可能性
-        std::this_thread::sleep_for(std::chrono::microseconds(1));
-      } catch (...) {
-        test_failed = true;
-        break;
-      }
-    }
-  });
+            // 短暂延迟以增加竞态条件的可能性
+            std::this_thread::sleep_for(std::chrono::microseconds(1));
+          } catch (...) {
+            test_failed = true;
+            break;
+          }
+        }
+      });
 
   // 读线程
   auto reader =
       std::async(std::launch::async, [this, num_iterations, &test_failed]() {
         for (int i = 0; i < num_iterations; ++i) {
           try {
-            auto position = cache_->getPositionNED();
+            auto pose = cache_->getVehiclePose();
             // 验证数据的一致性（如果有效的话）
-            if (position.valid) {
-              EXPECT_GE(position.translation.x(), 0);
-              EXPECT_GE(position.translation.y(), 1);
-              EXPECT_GE(position.translation.z(), 2);
+            if (pose.valid) {
+              EXPECT_GE(pose.position.x(), 0);
+              EXPECT_GE(pose.position.y(), 1);
+              EXPECT_GE(pose.position.z(), 2);
             }
             std::this_thread::sleep_for(std::chrono::microseconds(1));
           } catch (...) {
@@ -192,9 +209,8 @@ TEST_F(Px4MsgsCacheTest, MultipleWritersRaceCondition) {
                                           base_value + 2);
               Eigen::Quaterniond orientation(1.0, 0.0, 0.0, 0.0);
               rclcpp::Time timestamp = rclcpp::Clock().now();
-              px4Position::PositionNED position(translation, orientation,
-                                                timestamp);
-              cache_->updatePositionNED(position);
+              auto pose = makeVehiclePose(translation, orientation, timestamp);
+              cache_->updateVehiclePose(pose);
 
               // 更新电池状态
               px4Status::BatteryStatus battery;
@@ -235,11 +251,11 @@ TEST_F(Px4MsgsCacheTest, MultipleWritersRaceCondition) {
   EXPECT_FALSE(test_failed);
 
   // 验证最终状态的数据完整性
-  auto position = cache_->getPositionNED();
+  auto pose = cache_->getVehiclePose();
   auto battery = cache_->getBatteryStatus();
   auto vehicle = cache_->getVehicleStatus();
 
-  EXPECT_TRUE(position.valid);
+  EXPECT_TRUE(pose.valid);
   EXPECT_TRUE(battery.valid);
   EXPECT_TRUE(vehicle.valid);
 }
@@ -265,10 +281,9 @@ TEST_F(Px4MsgsCacheTest, ReaderStarvationTest) {
               Eigen::Vector3d translation(counter, counter + 1, counter + 2);
               Eigen::Quaterniond orientation(1.0, 0.0, 0.0, 0.0);
               rclcpp::Time timestamp = rclcpp::Clock().now();
-              px4Position::PositionNED position(translation, orientation,
-                                                timestamp);
+              auto pose = makeVehiclePose(translation, orientation, timestamp);
 
-              cache_->updatePositionNED(position);
+              cache_->updateVehiclePose(pose);
               successful_writes++;
               counter++;
 
@@ -287,7 +302,7 @@ TEST_F(Px4MsgsCacheTest, ReaderStarvationTest) {
         std::async(std::launch::async, [this, &stop_test, &successful_reads]() {
           while (!stop_test) {
             try {
-              auto position = cache_->getPositionNED();
+              auto pose = cache_->getVehiclePose();
               auto battery = cache_->getBatteryStatus();
               auto vehicle = cache_->getVehicleStatus();
 
@@ -345,9 +360,9 @@ TEST_F(Px4MsgsCacheTest, HighConcurrencyStressTest) {
                   Eigen::Vector3d translation(thread_id, i, thread_id + i);
                   Eigen::Quaterniond orientation(1.0, 0.0, 0.0, 0.0);
                   rclcpp::Time timestamp = rclcpp::Clock().now();
-                  px4Position::PositionNED position(translation, orientation,
-                                                    timestamp);
-                  cache_->updatePositionNED(position);
+                  auto pose =
+                      makeVehiclePose(translation, orientation, timestamp);
+                  cache_->updateVehiclePose(pose);
                   break;
                 }
                 case 2: {
@@ -377,13 +392,13 @@ TEST_F(Px4MsgsCacheTest, HighConcurrencyStressTest) {
                 case 4:
                 case 5: {
                   // 读取所有数据
-                  auto position = cache_->getPositionNED();
+                  auto pose = cache_->getVehiclePose();
                   auto battery = cache_->getBatteryStatus();
                   auto vehicle = cache_->getVehicleStatus();
 
                   // 简单验证数据完整性
-                  if (position.valid) {
-                    EXPECT_GE(position.translation.x(), 0);
+                  if (pose.valid) {
+                    EXPECT_GE(pose.position.x(), 0);
                   }
                   if (battery.valid) {
                     EXPECT_GT(battery.voltage_v, 0);
@@ -432,8 +447,8 @@ TEST_F(Px4MsgsCacheTest, DataConsistencyTest) {
       // 位置数据使用序列号
       Eigen::Vector3d translation(sequence, sequence, sequence);
       Eigen::Quaterniond orientation(1.0, 0.0, 0.0, 0.0);
-      px4Position::PositionNED position(translation, orientation, timestamp);
-      cache_->updatePositionNED(position);
+      auto pose = makeVehiclePose(translation, orientation, timestamp);
+      cache_->updateVehiclePose(pose);
 
       // 电池电压也使用序列号
       px4Status::BatteryStatus battery;
@@ -453,12 +468,12 @@ TEST_F(Px4MsgsCacheTest, DataConsistencyTest) {
   auto reader = std::async(
       std::launch::async, [this, num_iterations, &inconsistency_detected]() {
         for (int i = 0; i < num_iterations * 2; ++i) {
-          auto position = cache_->getPositionNED();
+          auto pose = cache_->getVehiclePose();
           auto battery = cache_->getBatteryStatus();
 
           // 如果数据有效，检查是否一致
-          if (position.valid && battery.valid) {
-            float pos_sequence = position.translation.x();
+          if (pose.valid && battery.valid) {
+            float pos_sequence = pose.position.x();
             float battery_sequence = (battery.voltage_v - 12.0f) / 0.001f;
 
             // 允许一定的浮点误差和并发更新差异

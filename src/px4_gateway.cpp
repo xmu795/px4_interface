@@ -1,18 +1,24 @@
 #include "px4_interface/px4_gateway.hpp"
 
+#include <cstdint>
 #include <exception>
 #include <memory>
 #include <px4_msgs/msg/battery_status.hpp>
 #include <px4_msgs/msg/offboard_control_mode.hpp>
 #include <px4_msgs/msg/trajectory_setpoint.hpp>
 #include <px4_msgs/msg/vehicle_command.hpp>
-#include <px4_msgs/msg/vehicle_local_position.hpp>
+#include <px4_msgs/msg/vehicle_odometry.hpp>
 #include <px4_msgs/msg/vehicle_status.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <string>
 
 #include "px4_interface/msg_converters.hpp"
 #include "px4_interface/px4_msgs_cache.hpp"
+
+namespace {
+/// PX4 消息时间戳单位为微秒，需要乘以该常量转换为纳秒后才能构造 ROS Time。
+constexpr uint64_t kMicrosToNanos = 1000ULL;
+}  // namespace
 
 PX4Gateway::PX4Gateway(const rclcpp::NodeOptions& options,
                        std::shared_ptr<Px4MsgsCache> cache)
@@ -47,7 +53,7 @@ void publish(const Data& data, PublisherPtr publisher) {
 
 void PX4Gateway::publishCache() const {
   publish(px4_msgs_cache_->getVehicleStatus(), vehicle_status_publisher_);
-  publish(px4_msgs_cache_->getPositionNED(), vehicle_local_position_publisher_);
+  publish(px4_msgs_cache_->getVehiclePose(), vehicle_odometry_publisher_);
   publish(px4_msgs_cache_->getBatteryStatus(), battery_status_publisher_);
 }
 
@@ -135,6 +141,34 @@ void PX4Gateway::triggerEmergencyStop() {
   RCLCPP_WARN(this->get_logger(), "Motors will stop immediately!");
 }
 
+PX4Gateway::Px4Timestamps PX4Gateway::processPx4Timestamp(
+    uint64_t px4_timestamp_us, const char* topic_name,
+    rclcpp::Duration tolerance) const {
+  // 统一转换 PX4 原始时间戳，并记录本地接收时刻，便于缓存层判断数据是否过期。
+  Px4Timestamps timestamps;
+  timestamps.received_timestamp = this->now();
+  const auto clock_type = this->get_clock()->get_clock_type();
+  timestamps.msg_timestamp =
+      rclcpp::Time(px4_timestamp_us * kMicrosToNanos, clock_type);
+
+  const auto lower_bound = timestamps.received_timestamp - tolerance;
+  const auto upper_bound = timestamps.received_timestamp + tolerance;
+
+  if (timestamps.msg_timestamp < lower_bound) {
+    RCLCPP_WARN(
+        this->get_logger(), "Received old %s message (%.3f s late).",
+        topic_name,
+        (timestamps.received_timestamp - timestamps.msg_timestamp).seconds());
+  } else if (timestamps.msg_timestamp > upper_bound) {
+    RCLCPP_WARN(
+        this->get_logger(),
+        "Received %s message from the future (%.3f s ahead).", topic_name,
+        (timestamps.msg_timestamp - timestamps.received_timestamp).seconds());
+  }
+
+  return timestamps;
+}
+
 void PX4Gateway::init() {
   // Tests:
   // Px4GatewayPublishCacheTest.InitSubscribesAndUpdatesCacheFromPx4Topics
@@ -154,9 +188,9 @@ void PX4Gateway::init() {
   vehicle_status_publisher_ =
       this->create_publisher<px4_interface::msg::VehicleStatus>(
           "/cache/vehicle_status", 10);
-  vehicle_local_position_publisher_ =
-      this->create_publisher<px4_interface::msg::PositionNED>(
-          "/cache/vehicle_local_position", 10);
+  vehicle_odometry_publisher_ =
+      this->create_publisher<px4_interface::msg::PoseNED>(
+          "/cache/vehicle_odometry", 10);
   battery_status_publisher_ =
       this->create_publisher<px4_interface::msg::BatteryStatus>(
           "/cache/battery_status", 10);
@@ -168,39 +202,55 @@ void PX4Gateway::init() {
           "/fmu/out/vehicle_status", qos_profile,
           [this](const px4_msgs::msg::VehicleStatus::SharedPtr msg) {
             px4Status::VehicleStatus status;
+            const auto timestamps =
+                processPx4Timestamp(msg->timestamp, "vehicle_status");
             status.valid = true;
-            status.latest_timestamp = this->get_clock()->now();
+            status.msg_timestamp = timestamps.msg_timestamp;
+            status.latest_timestamp = timestamps.received_timestamp;
             status.arming_state = msg->arming_state;
             status.nav_state = msg->nav_state;
             status.failsafe = msg->failsafe;
             status.pre_flight_checks_pass = msg->pre_flight_checks_pass;
             px4_msgs_cache_->updateVehicleStatus(status);
           });
-  vehicle_local_position_subscriber_ =
-      this->create_subscription<px4_msgs::msg::VehicleLocalPosition>(
-          "/fmu/out/vehicle_local_position", qos_profile,
-          [this](const px4_msgs::msg::VehicleLocalPosition::SharedPtr msg) {
-            px4Position::BasicPosition<px4Position::FrameNED> position;
-            position.valid = msg->xy_valid && msg->z_valid;
-            position.translation = Eigen::Vector3d(msg->x, msg->y, msg->z);
-            position.orientation =
-                Eigen::Quaterniond::Identity();  // PX4不提供姿态
-            position.timestamp = this->get_clock()->now();
-            px4_msgs_cache_->updatePositionNED(position);
+
+  vehicle_odometry_subscriber_ =
+      this->create_subscription<px4_msgs::msg::VehicleOdometry>(
+          "/fmu/out/vehicle_odometry", qos_profile,
+          [this](const px4_msgs::msg::VehicleOdometry::SharedPtr msg) {
+            px4Status::VehiclePose pose;
+            const auto timestamps =
+                processPx4Timestamp(msg->timestamp, "vehicle_odometry");
+            pose.position = Eigen::Vector3d(msg->position[0], msg->position[1],
+                                            msg->position[2]);
+            pose.orientation =
+                Eigen::Quaterniond(msg->q[0], msg->q[1], msg->q[2], msg->q[3]);
+            pose.velocity = Eigen::Vector3d(msg->velocity[0], msg->velocity[1],
+                                            msg->velocity[2]);
+            pose.valid = true;
+            pose.msg_timestamp = timestamps.msg_timestamp;
+            pose.latest_timestamp = timestamps.received_timestamp;
+
+            px4_msgs_cache_->updateVehiclePose(pose);
           });
+
   battery_status_subscriber_ =
       this->create_subscription<px4_msgs::msg::BatteryStatus>(
           "/fmu/out/battery_status", qos_profile,
           [this](const px4_msgs::msg::BatteryStatus::SharedPtr msg) {
             px4Status::BatteryStatus battery;
             battery.valid = true;
-            battery.timestamp = this->get_clock()->now();
+            const auto timestamps =
+                processPx4Timestamp(msg->timestamp, "battery_status");
+            battery.msg_timestamp = timestamps.msg_timestamp;
+            battery.timestamp = timestamps.received_timestamp;
             battery.voltage_v = msg->voltage_v;
             battery.current_a = msg->current_a;
             battery.remaining = msg->remaining;
             battery.warning = msg->warning;
             px4_msgs_cache_->updateBatteryStatus(battery);
           });
+
   // 创建定时器，定期发布OffboardControlMode(50Hz)
   offboard_control_timer_ = this->create_wall_timer(
       std::chrono::milliseconds(1000 / offboard_control_rate_hz_), [this]() {

@@ -33,7 +33,7 @@ find_package(rosidl_default_generators REQUIRED) # 生成本包自定义消息�
 # 并且保证 rosidl_generate_interfaces 在 ament_package() 之前调用。
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/VehicleStatus.msg"
-  "msg/PositionNED.msg"
+  "msg/PoseNED.msg"
   "msg/BatteryStatus.msg"
   DEPENDENCIES builtin_interfaces
 )

@@ -17,11 +17,11 @@ PX4 Interface 是构建在 ROS 2 (Humble+) 与 PX4 飞控之间的数据桥接�
 ```mermaid
 flowchart LR
 	PX4[PX4 Flight Controller]
-	PX4 -->|/fmu/out/vehicle_status\n/fmu/out/vehicle_local_position\n/fmu/out/battery_status| Gateway
+	PX4 -->|/fmu/out/vehicle_status\n/fmu/out/vehicle_odometry\n/fmu/out/battery_status| Gateway
 	Gateway[[PX4Gateway (rclcpp::Node)]]
 	Gateway -->|更新| Cache[Px4MsgsCache]
 	Cache -->|线程安全读取| Gateway
-	Gateway -->|/cache/vehicle_status\n/cache/vehicle_local_position\n/cache/battery_status| ROSApp[上层 ROS 2 节点]
+	Gateway -->|/cache/vehicle_status\n/cache/vehicle_odometry\n/cache/battery_status| ROSApp[上层 ROS 2 节点]
 	ROSApp -->|调用 API| Gateway
 	Gateway -->|/fmu/in/offboard_control_mode\n/fmu/in/trajectory_setpoint\n/fmu/in/vehicle_command| PX4
 ```
@@ -42,13 +42,13 @@ flowchart LR
 | 方向 | 话题 | 类型 | 说明 |
 | --- | --- | --- | --- |
 | 订阅 | `/fmu/out/vehicle_status` | `px4_msgs/msg/VehicleStatus` | PX4 提供的飞控状态 |
-| 订阅 | `/fmu/out/vehicle_local_position` | `px4_msgs/msg/VehicleLocalPosition` | 位置与高度（NED 坐标） |
+| 订阅 | `/fmu/out/vehicle_odometry` | `px4_msgs/msg/VehicleOdometry` | 位姿与速度（NED 坐标 + 姿态） |
 | 订阅 | `/fmu/out/battery_status` | `px4_msgs/msg/BatteryStatus` | 电池电量、电压、告警 |
 | 发布 | `/fmu/in/offboard_control_mode` | `px4_msgs/msg/OffboardControlMode` | 50 Hz 心跳，声明控制模式 |
 | 发布 | `/fmu/in/trajectory_setpoint` | `px4_msgs/msg/TrajectorySetpoint` | Offboard 位置/速度设定点 |
 | 发布 | `/fmu/in/vehicle_command` | `px4_msgs/msg/VehicleCommand` | 解锁、模式切换等命令 |
 | 发布 | `/cache/vehicle_status` | `px4_interface/msg/VehicleStatus` | 缓存后的飞控状态，时间戳自节点时钟 |
-| 发布 | `/cache/vehicle_local_position` | `px4_interface/msg/PositionNED` | 缓存后的位置信息，含四元数姿态 |
+| 发布 | `/cache/vehicle_odometry` | `px4_interface/msg/PositionNED` | 缓存后的位置信息，含四元数姿态 |
 | 发布 | `/cache/battery_status` | `px4_interface/msg/BatteryStatus` | 缓存后的电池信息 |
 
 ### 自定义消息字段
@@ -68,7 +68,7 @@ flowchart LR
 
 | 字段 | 类型 | 描述 |
 | --- | --- | --- |
-| `valid` | `bool` | `vehicle_local_position` 中 xy/z 是否有效 |
+| `valid` | `bool` | `vehicle_odometry` 消息转换后是否有效 |
 | `translation` | `float64[3]` | NED 坐标位置 (m) |
 | `orientation` | `float64[4]` | 四元数 `(w, x, y, z)`；PX4 默认无姿态信息时为单位四元数 |
 | `timestamp` | `builtin_interfaces/Time` | Gateway 获取数据时间 |

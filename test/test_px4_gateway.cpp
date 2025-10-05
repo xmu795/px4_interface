@@ -7,13 +7,13 @@
 #include <mutex>
 #include <optional>
 #include <px4_interface/msg/battery_status.hpp>
-#include <px4_interface/msg/position_ned.hpp>
+#include <px4_interface/msg/pose_ned.hpp>
 #include <px4_interface/msg/vehicle_status.hpp>
 #include <px4_msgs/msg/battery_status.hpp>
 #include <px4_msgs/msg/offboard_control_mode.hpp>
 #include <px4_msgs/msg/trajectory_setpoint.hpp>
 #include <px4_msgs/msg/vehicle_command.hpp>
-#include <px4_msgs/msg/vehicle_local_position.hpp>
+#include <px4_msgs/msg/vehicle_odometry.hpp>
 #include <px4_msgs/msg/vehicle_status.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <thread>
@@ -37,9 +37,9 @@ class CacheSubscriberNode : public rclcpp::Node {
               vehicle_status_msg_ = msg;
             });
 
-    position_sub_ = this->create_subscription<px4_interface::msg::PositionNED>(
-        "/cache/vehicle_local_position", qos,
-        [this](const px4_interface::msg::PositionNED &msg) {
+    position_sub_ = this->create_subscription<px4_interface::msg::PoseNED>(
+        "/cache/vehicle_odometry", qos,
+        [this](const px4_interface::msg::PoseNED &msg) {
           std::lock_guard<std::mutex> lock(mutex_);
           position_msg_ = msg;
         });
@@ -69,7 +69,7 @@ class CacheSubscriberNode : public rclcpp::Node {
     return vehicle_status_msg_;
   }
 
-  std::optional<px4_interface::msg::PositionNED> last_position() const {
+  std::optional<px4_interface::msg::PoseNED> last_position() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return position_msg_;
   }
@@ -82,14 +82,13 @@ class CacheSubscriberNode : public rclcpp::Node {
  private:
   rclcpp::Subscription<px4_interface::msg::VehicleStatus>::SharedPtr
       vehicle_status_sub_;
-  rclcpp::Subscription<px4_interface::msg::PositionNED>::SharedPtr
-      position_sub_;
+  rclcpp::Subscription<px4_interface::msg::PoseNED>::SharedPtr position_sub_;
   rclcpp::Subscription<px4_interface::msg::BatteryStatus>::SharedPtr
       battery_sub_;
 
   mutable std::mutex mutex_;
   std::optional<px4_interface::msg::VehicleStatus> vehicle_status_msg_;
-  std::optional<px4_interface::msg::PositionNED> position_msg_;
+  std::optional<px4_interface::msg::PoseNED> position_msg_;
   std::optional<px4_interface::msg::BatteryStatus> battery_msg_;
 };
 
@@ -232,8 +231,9 @@ TEST_F(Px4GatewayPublishCacheTest, PublishesCachedMessagesToAllTopics) {
   rclcpp::Clock clock;
   auto base_time = clock.now();
 
-  px4Status::VehicleStatus vehicle_status{};
+  px4Status::VehicleStatus vehicle_status;
   vehicle_status.valid = true;
+  vehicle_status.msg_timestamp = base_time;
   vehicle_status.latest_timestamp = base_time;
   vehicle_status.arming_state = 2;
   vehicle_status.nav_state = 4;
@@ -241,21 +241,24 @@ TEST_F(Px4GatewayPublishCacheTest, PublishesCachedMessagesToAllTopics) {
   vehicle_status.pre_flight_checks_pass = true;
   cache->updateVehicleStatus(vehicle_status);
 
-  px4Status::BatteryStatus battery_status{};
+  px4Status::BatteryStatus battery_status;
   battery_status.valid = true;
   battery_status.timestamp = base_time + rclcpp::Duration(0, 5000);
+  battery_status.msg_timestamp = battery_status.timestamp;
   battery_status.voltage_v = 12.6f;
   battery_status.current_a = 3.4f;
   battery_status.remaining = 0.82f;
   battery_status.warning = 2;
   cache->updateBatteryStatus(battery_status);
 
-  px4Position::BasicPosition<px4Position::FrameNED> position{};
-  position.valid = true;
-  position.translation = Eigen::Vector3d(1.0, -2.0, 3.5);
-  position.orientation = Eigen::Quaterniond(0.9238795, 0.0, 0.3826834, 0.0);
-  position.timestamp = base_time + rclcpp::Duration(0, 10000);
-  cache->updatePositionNED(position);
+  px4Status::VehiclePose pose;
+  pose.valid = true;
+  pose.position = Eigen::Vector3d(1.0, -2.0, 3.5);
+  pose.orientation = Eigen::Quaterniond(0.9238795, 0.0, 0.3826834, 0.0);
+  pose.velocity = Eigen::Vector3d::Zero();
+  pose.msg_timestamp = base_time + rclcpp::Duration(0, 10000);
+  pose.latest_timestamp = pose.msg_timestamp;
+  cache->updateVehiclePose(pose);
 
   auto gateway = std::make_shared<PX4Gateway>(rclcpp::NodeOptions(), cache);
   auto listener = std::make_shared<CacheSubscriberNode>();
@@ -294,25 +297,21 @@ TEST_F(Px4GatewayPublishCacheTest, PublishesCachedMessagesToAllTopics) {
   EXPECT_EQ(received_vehicle->failsafe, vehicle_status.failsafe);
   EXPECT_EQ(received_vehicle->pre_flight_checks_pass,
             vehicle_status.pre_flight_checks_pass);
-  EXPECT_EQ(rclcpp::Time(received_vehicle->latest_timestamp).nanoseconds(),
-            vehicle_status.latest_timestamp.nanoseconds());
+  EXPECT_EQ(rclcpp::Time(received_vehicle->timestamp).nanoseconds(),
+            vehicle_status.msg_timestamp.nanoseconds());
 
   auto received_position = listener->last_position();
   ASSERT_TRUE(received_position.has_value());
   EXPECT_TRUE(received_position->valid);
-  EXPECT_DOUBLE_EQ(received_position->translation[0], position.translation.x());
-  EXPECT_DOUBLE_EQ(received_position->translation[1], position.translation.y());
-  EXPECT_DOUBLE_EQ(received_position->translation[2], position.translation.z());
-  EXPECT_NEAR(received_position->orientation[0], position.orientation.w(),
-              1e-6);
-  EXPECT_NEAR(received_position->orientation[1], position.orientation.x(),
-              1e-6);
-  EXPECT_NEAR(received_position->orientation[2], position.orientation.y(),
-              1e-6);
-  EXPECT_NEAR(received_position->orientation[3], position.orientation.z(),
-              1e-6);
+  EXPECT_DOUBLE_EQ(received_position->translation[0], pose.position.x());
+  EXPECT_DOUBLE_EQ(received_position->translation[1], pose.position.y());
+  EXPECT_DOUBLE_EQ(received_position->translation[2], pose.position.z());
+  EXPECT_NEAR(received_position->orientation[0], pose.orientation.w(), 1e-6);
+  EXPECT_NEAR(received_position->orientation[1], pose.orientation.x(), 1e-6);
+  EXPECT_NEAR(received_position->orientation[2], pose.orientation.y(), 1e-6);
+  EXPECT_NEAR(received_position->orientation[3], pose.orientation.z(), 1e-6);
   EXPECT_EQ(rclcpp::Time(received_position->timestamp).nanoseconds(),
-            position.timestamp.nanoseconds());
+            pose.msg_timestamp.nanoseconds());
 
   auto received_battery = listener->last_battery();
   ASSERT_TRUE(received_battery.has_value());
@@ -449,9 +448,9 @@ TEST_F(Px4GatewayPublishCacheTest, InitSubscribesAndUpdatesCacheFromPx4Topics) {
   auto vehicle_status_pub =
       px4_source->create_publisher<px4_msgs::msg::VehicleStatus>(
           "/fmu/out/vehicle_status", 10);
-  auto vehicle_local_position_pub =
-      px4_source->create_publisher<px4_msgs::msg::VehicleLocalPosition>(
-          "/fmu/out/vehicle_local_position", 10);
+  auto vehicle_odometry_pub =
+      px4_source->create_publisher<px4_msgs::msg::VehicleOdometry>(
+          "/fmu/out/vehicle_odometry", 10);
   auto battery_status_pub =
       px4_source->create_publisher<px4_msgs::msg::BatteryStatus>(
           "/fmu/out/battery_status", 10);
@@ -462,7 +461,7 @@ TEST_F(Px4GatewayPublishCacheTest, InitSubscribesAndUpdatesCacheFromPx4Topics) {
 
   auto discovery_deadline = std::chrono::steady_clock::now() + 300ms;
   while ((vehicle_status_pub->get_subscription_count() == 0 ||
-          vehicle_local_position_pub->get_subscription_count() == 0 ||
+          vehicle_odometry_pub->get_subscription_count() == 0 ||
           battery_status_pub->get_subscription_count() == 0) &&
          std::chrono::steady_clock::now() < discovery_deadline) {
     exec.spin_some();
@@ -470,7 +469,7 @@ TEST_F(Px4GatewayPublishCacheTest, InitSubscribesAndUpdatesCacheFromPx4Topics) {
   }
 
   ASSERT_GT(vehicle_status_pub->get_subscription_count(), 0u);
-  ASSERT_GT(vehicle_local_position_pub->get_subscription_count(), 0u);
+  ASSERT_GT(vehicle_odometry_pub->get_subscription_count(), 0u);
   ASSERT_GT(battery_status_pub->get_subscription_count(), 0u);
 
   px4_msgs::msg::VehicleStatus vehicle_status_msg;
@@ -479,12 +478,19 @@ TEST_F(Px4GatewayPublishCacheTest, InitSubscribesAndUpdatesCacheFromPx4Topics) {
   vehicle_status_msg.failsafe = true;
   vehicle_status_msg.pre_flight_checks_pass = false;
 
-  px4_msgs::msg::VehicleLocalPosition vehicle_position_msg;
-  vehicle_position_msg.x = 4.5f;
-  vehicle_position_msg.y = -1.25f;
-  vehicle_position_msg.z = 0.8f;
-  vehicle_position_msg.xy_valid = true;
-  vehicle_position_msg.z_valid = true;
+  px4_msgs::msg::VehicleOdometry vehicle_odometry_msg;
+  vehicle_odometry_msg.timestamp =
+      static_cast<uint64_t>(rclcpp::Clock().now().nanoseconds() / 1000);
+  vehicle_odometry_msg.position[0] = 4.5f;
+  vehicle_odometry_msg.position[1] = -1.25f;
+  vehicle_odometry_msg.position[2] = 0.8f;
+  vehicle_odometry_msg.q[0] = 1.0f;
+  vehicle_odometry_msg.q[1] = 0.0f;
+  vehicle_odometry_msg.q[2] = 0.0f;
+  vehicle_odometry_msg.q[3] = 0.0f;
+  vehicle_odometry_msg.velocity[0] = 0.0f;
+  vehicle_odometry_msg.velocity[1] = 0.0f;
+  vehicle_odometry_msg.velocity[2] = 0.0f;
 
   px4_msgs::msg::BatteryStatus battery_msg;
   battery_msg.voltage_v = 15.2f;
@@ -493,7 +499,7 @@ TEST_F(Px4GatewayPublishCacheTest, InitSubscribesAndUpdatesCacheFromPx4Topics) {
   battery_msg.warning = 3;
 
   vehicle_status_pub->publish(vehicle_status_msg);
-  vehicle_local_position_pub->publish(vehicle_position_msg);
+  vehicle_odometry_pub->publish(vehicle_odometry_msg);
   battery_status_pub->publish(battery_msg);
 
   auto receive_deadline = std::chrono::steady_clock::now() + 500ms;
@@ -514,16 +520,19 @@ TEST_F(Px4GatewayPublishCacheTest, InitSubscribesAndUpdatesCacheFromPx4Topics) {
             vehicle_status_msg.pre_flight_checks_pass);
   EXPECT_GT(cached_status.latest_timestamp.nanoseconds(), 0);
 
-  auto cached_position = cache->getPositionNED();
+  auto cached_position = cache->getVehiclePose();
   EXPECT_TRUE(cached_position.valid);
-  EXPECT_DOUBLE_EQ(cached_position.translation.x(), vehicle_position_msg.x);
-  EXPECT_DOUBLE_EQ(cached_position.translation.y(), vehicle_position_msg.y);
-  EXPECT_DOUBLE_EQ(cached_position.translation.z(), vehicle_position_msg.z);
+  EXPECT_DOUBLE_EQ(cached_position.position.x(),
+                   vehicle_odometry_msg.position[0]);
+  EXPECT_DOUBLE_EQ(cached_position.position.y(),
+                   vehicle_odometry_msg.position[1]);
+  EXPECT_DOUBLE_EQ(cached_position.position.z(),
+                   vehicle_odometry_msg.position[2]);
   EXPECT_DOUBLE_EQ(cached_position.orientation.w(), 1.0);
   EXPECT_DOUBLE_EQ(cached_position.orientation.x(), 0.0);
   EXPECT_DOUBLE_EQ(cached_position.orientation.y(), 0.0);
   EXPECT_DOUBLE_EQ(cached_position.orientation.z(), 0.0);
-  EXPECT_GT(cached_position.timestamp.nanoseconds(), 0);
+  EXPECT_GT(cached_position.msg_timestamp.nanoseconds(), 0);
 
   auto cached_battery = cache->getBatteryStatus();
   EXPECT_TRUE(cached_battery.valid);

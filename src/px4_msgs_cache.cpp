@@ -1,8 +1,8 @@
 #include "px4_interface/px4_msgs_cache.hpp"
 
-void Px4MsgsCache::updatePositionNED(
-    const px4Position::PositionNED& new_position) {
-  position_ned_cache_.update(new_position);
+void Px4MsgsCache::updateVehiclePose(
+    const px4Status::VehiclePose& new_position) {
+  vehicle_pose_cache_.update(new_position);
 }
 
 void Px4MsgsCache::updateBatteryStatus(
@@ -15,8 +15,8 @@ void Px4MsgsCache::updateVehicleStatus(
   vehicle_status_cache_.update(new_status);
 }
 
-px4Position::PositionNED Px4MsgsCache::getPositionNED() const {
-  return position_ned_cache_.get();
+px4Status::VehiclePose Px4MsgsCache::getVehiclePose() const {
+  return vehicle_pose_cache_.get();
 }
 
 px4Status::BatteryStatus Px4MsgsCache::getBatteryStatus() const {
