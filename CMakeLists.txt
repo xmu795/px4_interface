@@ -135,9 +135,10 @@ if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   find_package(ament_cmake_gtest REQUIRED)
 
-  # 下面两个变量设置为 TRUE 用于临时跳过某些检查，正式项目建议删除：
-  set(ament_cmake_cpplint_FOUND TRUE)
-  set(ament_cmake_copyright_FOUND TRUE)
+  # 设置为 TRUE 用于跳过某些检查
+  set(ament_cmake_uncrustify_FOUND TRUE) # 使用clang-format，不使用 uncrustify
+  set(ament_cmake_cpplint_FOUND TRUE) # 使用 clang-format，不使用 cpplint
+  set(ament_cmake_copyright_FOUND TRUE) # 版权在 package.xml 中声明
 
   ament_lint_auto_find_test_dependencies()
 
@@ -183,6 +184,9 @@ ament_package()
 # 2. PUBLIC / PRIVATE / INTERFACE 有何区别? -> 传播范围：PUBLIC=自己+依赖者；PRIVATE=仅自己；INTERFACE=自己没有源或只传播给依赖者。
 # 3. ament_target_dependencies 做了什么? -> 相当于 target_link_libraries + 自动追加 include 路径 + 添加系统依赖，减少手写。
 # 4. 如何新增一个源文件? -> 把文件追加到 add_library 的列表，或使用 target_sources。
-# 5. 如何添加可执行节点? -> add_executable(node_name src/node.cpp); 然后 ament_target_dependencies(node_name rclcpp ...) 并 install(TARGETS node_name ... RUNTIME DESTINATION lib/${PROJECT_NAME})。
+# 5. 如何添加可执行节点?
+#    add_executable(node_name src/node.cpp);
+#    然后 ament_target_dependencies(node_name rclcpp ...)
+#    并 install(TARGETS node_name ... RUNTIME DESTINATION lib/${PROJECT_NAME}).
 # 6. 为什么导出 targets? -> 便于下游使用 find_package(px4_interface) 时拿到配置 & 链接信息，支持更好的复用。
 

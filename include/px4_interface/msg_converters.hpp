@@ -7,8 +7,8 @@
 namespace MsgConverters {
 
 // 将缓存的 VehicleStatus 转换为 ROS 消息
-inline px4_interface::msg::VehicleStatus
-convert(const px4Status::VehicleStatus &status) {
+inline px4_interface::msg::VehicleStatus convert(
+    const px4Status::VehicleStatus &status) {
   px4_interface::msg::VehicleStatus msg;
   msg.valid = status.valid;
   msg.latest_timestamp = status.latest_timestamp;
@@ -19,8 +19,8 @@ convert(const px4Status::VehicleStatus &status) {
   return msg;
 }
 // 将缓存的 PositionNED 转换为 ROS 消息
-inline px4_interface::msg::PositionNED
-convert(const px4Position::BasicPosition<px4Position::FrameNED> &position) {
+inline px4_interface::msg::PositionNED convert(
+    const px4Position::BasicPosition<px4Position::FrameNED> &position) {
   px4_interface::msg::PositionNED msg;
   msg.valid = position.valid;
   msg.translation = {position.translation.x(), position.translation.y(),
@@ -31,8 +31,8 @@ convert(const px4Position::BasicPosition<px4Position::FrameNED> &position) {
   return msg;
 }
 // 将缓存的 BatteryStatus 转换为 ROS 消息
-inline px4_interface::msg::BatteryStatus
-convert(const px4Status::BatteryStatus &battery) {
+inline px4_interface::msg::BatteryStatus convert(
+    const px4Status::BatteryStatus &battery) {
   px4_interface::msg::BatteryStatus msg;
   msg.valid = battery.valid;
   msg.timestamp = battery.timestamp;
@@ -42,4 +42,4 @@ convert(const px4Status::BatteryStatus &battery) {
   msg.warning = battery.warning;
   return msg;
 }
-} // namespace MsgConverters
+}  // namespace MsgConverters

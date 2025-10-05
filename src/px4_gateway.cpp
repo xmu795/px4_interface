@@ -1,6 +1,5 @@
 #include "px4_interface/px4_gateway.hpp"
-#include "px4_interface/msg_converters.hpp"
-#include "px4_interface/px4_msgs_cache.hpp"
+
 #include <exception>
 #include <memory>
 #include <px4_msgs/msg/battery_status.hpp>
@@ -12,7 +11,10 @@
 #include <rclcpp/rclcpp.hpp>
 #include <string>
 
-PX4Gateway::PX4Gateway(const rclcpp::NodeOptions &options,
+#include "px4_interface/msg_converters.hpp"
+#include "px4_interface/px4_msgs_cache.hpp"
+
+PX4Gateway::PX4Gateway(const rclcpp::NodeOptions& options,
                        std::shared_ptr<Px4MsgsCache> cache)
     : Node("PX4_Gateway", options), px4_msgs_cache_(std::move(cache)) {
   if (px4_msgs_cache_ == nullptr) {
@@ -38,7 +40,7 @@ bool PX4Gateway::checkPx4Publishers() const {
 }
 
 template <typename Data, typename PublisherPtr>
-void publish(const Data &data, PublisherPtr publisher) {
+void publish(const Data& data, PublisherPtr publisher) {
   auto msg = MsgConverters::convert(data);
   publisher->publish(msg);
 }
@@ -51,18 +53,18 @@ void PX4Gateway::publishCache() const {
 
 void PX4Gateway::chooseControlMethod(bool position_control,
                                      bool velocity_control) {
-  // TODO(TEST-LOW):
-  // 简单赋值逻辑，可在补充高优先级测试后再通过轻量测试覆盖边界组合。
+  // Tests:
+  // Px4GatewayPublishCacheTest.OffboardControlModeReflectsChosenFlags
+  // （验证标志位变更可通过 OffboardControlMode 心跳观察）。
   offboard_position_control_ = position_control;
   offboard_velocity_control_ = velocity_control;
 }
 
-// TODO(TEST-HIGH): 为 setTarget(setpoint)
-// 添加测试，校验位置/速度向量与时间戳映射至 TrajectorySetpoint
-// 消息字段的正确性。
-void PX4Gateway::setTarget(const px4GatewayTypes::setpoint &target) {
+// Tests:
+// Px4GatewayPublishCacheTest.SetTargetPublishesConvertedTrajectorySetpoint
+void PX4Gateway::setTarget(const px4GatewayTypes::setpoint& target) {
   px4_msgs::msg::TrajectorySetpoint
-      traj_setpoint_msg; // Todo: 优化，这里的转化过于机械
+      traj_setpoint_msg;  // Todo: 优化，这里的转化过于机械
   traj_setpoint_msg.position[0] = target.position[0];
   traj_setpoint_msg.position[1] = target.position[1];
   traj_setpoint_msg.position[2] = target.position[2];
@@ -76,23 +78,23 @@ void PX4Gateway::setTarget(const px4GatewayTypes::setpoint &target) {
 
 // TODO(TEST-LOW): setTarget(msg)
 // 仅简单转发，后续可使用轻量发布捕获测试验证原样透传。
-void PX4Gateway::setTarget(const px4_msgs::msg::TrajectorySetpoint &target) {
+void PX4Gateway::setTarget(const px4_msgs::msg::TrajectorySetpoint& target) {
   trajectory_setpoint_publisher_->publish(target);
 }
 
-// TODO(TEST-HIGH): 为 publishVehicleCommand 编写测试，确保命令枚举与参数字段、
-// target/source 系统组件号以及时间戳被正确设置。
+// Tests:
+// Px4GatewayPublishCacheTest.PublishVehicleCommandFillsFieldsCorrectly
 void PX4Gateway::publishVehicleCommand(const px4Enum::VehicleCommand command,
                                        const float param1, const float param2) {
   px4_msgs::msg::VehicleCommand vehicle_command_msg;
   vehicle_command_msg.command = static_cast<uint32_t>(command);
   vehicle_command_msg.param1 = param1;
   vehicle_command_msg.param2 = param2;
-  vehicle_command_msg.target_system = 1;    // 通常为1
-  vehicle_command_msg.target_component = 1; // 通常为1
-  vehicle_command_msg.source_system = 1;    // 通常为1
-  vehicle_command_msg.source_component = 1; // 通常为1
-  vehicle_command_msg.from_external = true; // 来自外部控制器
+  vehicle_command_msg.target_system = 1;     // 通常为1
+  vehicle_command_msg.target_component = 1;  // 通常为1
+  vehicle_command_msg.source_system = 1;     // 通常为1
+  vehicle_command_msg.source_component = 1;  // 通常为1
+  vehicle_command_msg.from_external = true;  // 来自外部控制器
   vehicle_command_msg.timestamp = this->get_clock()->now().nanoseconds() / 1000;
   vehicle_command_publisher_->publish(vehicle_command_msg);
 }
@@ -113,9 +115,9 @@ void PX4Gateway::setDisarmMode() {
 }
 
 void PX4Gateway::setOffboardMode() {
-  // TODO(TEST-MED): 覆盖
-  // setOffboardMode/setLandMode/triggerEmergencyStop，确保高层 快捷接口向
-  // publishVehicleCommand 提供的命令和参数组合正确。
+  // TODO(TEST-MED): 补充单元测试覆盖
+  // setOffboardMode/setLandMode/triggerEmergencyStop 等封装命令，验证调用
+  // publishVehicleCommand 时参数取值正确。
   publishVehicleCommand(px4Enum::VehicleCommand::VEHICLE_CMD_DO_SET_MODE, 1.0f,
                         6.0f);
   RCLCPP_INFO(this->get_logger(), "Sent OFFBOARD mode command to PX4");
@@ -134,8 +136,9 @@ void PX4Gateway::triggerEmergencyStop() {
 }
 
 void PX4Gateway::init() {
-  // TODO(TEST-HIGH): 设计基于rclcpp::Node的测试夹具，验证 init()
-  // 创建的发布者、订阅者 与定时器行为，特别是订阅回调更新 Px4MsgsCache 的路径。
+  // Tests:
+  // Px4GatewayPublishCacheTest.InitSubscribesAndUpdatesCacheFromPx4Topics
+  // （验证订阅回调将 PX4 消息写入 Px4MsgsCache）。
   // 提供给PX4的发布者
   offboard_control_mode_publisher_ =
       this->create_publisher<px4_msgs::msg::OffboardControlMode>(
@@ -145,7 +148,7 @@ void PX4Gateway::init() {
           "/fmu/in/trajectory_setpoint", 10);
   vehicle_command_publisher_ =
       this->create_publisher<px4_msgs::msg::VehicleCommand>(
-          "/fmu/in/vehicle_command", 10); // 发布车辆控制命令
+          "/fmu/in/vehicle_command", 10);  // 发布车辆控制命令
 
   // 提供给外部的发布者
   vehicle_status_publisher_ =
@@ -181,7 +184,7 @@ void PX4Gateway::init() {
             position.valid = msg->xy_valid && msg->z_valid;
             position.translation = Eigen::Vector3d(msg->x, msg->y, msg->z);
             position.orientation =
-                Eigen::Quaterniond::Identity(); // PX4不提供姿态
+                Eigen::Quaterniond::Identity();  // PX4不提供姿态
             position.timestamp = this->get_clock()->now();
             px4_msgs_cache_->updatePositionNED(position);
           });
@@ -211,12 +214,11 @@ void PX4Gateway::init() {
 
 void PX4Gateway::publishOffboardControlMode(const bool position_control,
                                             const bool velocity_control) {
-  // TODO(TEST-HIGH): 编写测试验证 chooseControlMethod 与
-  // publishOffboardControlMode 协同工作时，Offboard
-  // 控制模式标志位与心跳频率设置正确。
+  // Tests:
+  //  Px4GatewayPublishCacheTest.OffboardControlModeReflectsChosenFlags
   px4_msgs::msg::OffboardControlMode offboard_msg;
-  offboard_msg.position = position_control; // 位置控制
-  offboard_msg.velocity = velocity_control; // 速度控制
+  offboard_msg.position = position_control;  // 位置控制
+  offboard_msg.velocity = velocity_control;  // 速度控制
   offboard_msg.acceleration = false;
   offboard_msg.attitude = false;
   offboard_msg.body_rate = false;

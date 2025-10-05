@@ -7,16 +7,19 @@
  */
 
 #pragma once
-#include "px4_comm_types.hpp"
+
 #include <mutex>
 #include <utility>
 
-template <typename T> class ThreadSafeCache {
-private:
+#include "px4_comm_types.hpp"
+
+template <typename T>
+class ThreadSafeCache {
+ private:
   T data_;
   mutable std::mutex mutex_;
 
-public:
+ public:
   ThreadSafeCache() = default;
   explicit ThreadSafeCache(T initial_data) : data_(std::move(initial_data)) {}
 
@@ -32,7 +35,8 @@ public:
     return data_;
   }
 
-  template <typename F> auto access(F &&func) const -> decltype(func(data_)) {
+  template <typename F>
+  auto access(F &&func) const -> decltype(func(data_)) {
     std::lock_guard<std::mutex> lock(mutex_);
     return func(data_);
   }
@@ -56,7 +60,7 @@ public:
  * @warning 在高频率访问时需要注意性能影响
  */
 class Px4MsgsCache {
-private:
+ private:
   /**
    * @brief PX4的NED坐标系位置数据缓存
    * @details
@@ -76,7 +80,7 @@ private:
    */
   ThreadSafeCache<px4Status::VehicleStatus> vehicle_status_cache_;
 
-public:
+ public:
   /**
    * @brief 默认构造函数
    * @details 初始化Px4MsgsCache对象，所有成员变量使用默认值

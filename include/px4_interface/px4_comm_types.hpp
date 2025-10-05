@@ -23,11 +23,12 @@ struct FrameENU {};
 /**
  *@brief 所有位置数据的一般格式
  */
-template <typename Frame> struct BasicPosition {
-  bool valid = false;             // 位置信息是否有效
-  Eigen::Vector3d translation;    // 位置 (m)
-  Eigen::Quaterniond orientation; // 姿态 (四元数)
-  rclcpp::Time timestamp;         // 时间戳
+template <typename Frame>
+struct BasicPosition {
+  bool valid = false;              // 位置信息是否有效
+  Eigen::Vector3d translation;     // 位置 (m)
+  Eigen::Quaterniond orientation;  // 姿态 (四元数)
+  rclcpp::Time timestamp;          // 时间戳
   using FrameType = Frame;
 
   /**
@@ -85,7 +86,7 @@ const Eigen::Matrix3d R_ned_from_enu =
  */
 [[nodiscard]] inline PositionNED enuToNed(const PositionENU &pos_enu) {
   if (!pos_enu.valid) {
-    return PositionNED(); // 返回无效位置
+    return PositionNED();  // 返回无效位置
   }
   Eigen::Vector3d t_ned = R_ned_from_enu * pos_enu.translation;
   Eigen::Quaterniond q_ned = Eigen::Quaterniond(
@@ -99,7 +100,7 @@ const Eigen::Matrix3d R_ned_from_enu =
  */
 [[nodiscard]] inline PositionENU nedToEnu(const PositionNED &pos_ned) {
   if (!pos_ned.valid) {
-    return PositionENU(); // 返回无效位置
+    return PositionENU();  // 返回无效位置
   }
   Eigen::Vector3d t_enu = R_ned_from_enu.transpose() * pos_ned.translation;
   Eigen::Quaterniond q_enu = Eigen::Quaterniond(
@@ -107,41 +108,41 @@ const Eigen::Matrix3d R_ned_from_enu =
       R_ned_from_enu);
   return PositionENU(t_enu, q_enu, pos_ned.timestamp);
 }
-} // namespace px4Position
+}  // namespace px4Position
 
 namespace px4Status {
 /**
  *@brief 需要持续更新的PX4飞控状态结构
  */
 struct VehicleStatus {
-  bool valid = false;                  // 数据是否有效
-  rclcpp::Time latest_timestamp;       // 时间戳
-  uint8_t arming_state = 0;            // 解锁状态, 1: DISARMED, 2: ARMED
-  uint8_t nav_state = 0;               // 导航状态, 见PX4文档
-  bool failsafe = false;               // 是否处于故障保护状态
-  bool pre_flight_checks_pass = false; // 飞前检查是否通过
+  bool valid = false;                   // 数据是否有效
+  rclcpp::Time latest_timestamp;        // 时间戳
+  uint8_t arming_state = 0;             // 解锁状态, 1: DISARMED, 2: ARMED
+  uint8_t nav_state = 0;                // 导航状态, 见PX4文档
+  bool failsafe = false;                // 是否处于故障保护状态
+  bool pre_flight_checks_pass = false;  // 飞前检查是否通过
 };
 
 /**
  * @brief 实用的电池状态缓存，包含了做决策所需的核心信息
  */
 struct BatteryStatus {
-  bool valid = false;     // 数据是否有效
-  rclcpp::Time timestamp; // 最新数据的时间戳
-  float voltage_v = 0.0f; // [V] 电池电压
-  float current_a = 0.0f; // [A] 当前电流，可以判断负载情况
-  float remaining = 0.0f; // [0.0 to 1.0] 剩余电量百分比，重要指标
-  uint8_t warning = 0; // 警告状态 (来自PX4的WARNING_NONE, LOW, CRITICAL等)
+  bool valid = false;      // 数据是否有效
+  rclcpp::Time timestamp;  // 最新数据的时间戳
+  float voltage_v = 0.0f;  // [V] 电池电压
+  float current_a = 0.0f;  // [A] 当前电流，可以判断负载情况
+  float remaining = 0.0f;  // [0.0 to 1.0] 剩余电量百分比，重要指标
+  uint8_t warning = 0;  // 警告状态 (来自PX4的WARNING_NONE, LOW, CRITICAL等)
 };
-} // namespace px4Status
+}  // namespace px4Status
 
 namespace px4GatewayTypes {
 struct setpoint {
-  float position[3]; // 位置 (x, y, z) 米
-  float velocity[3]; // 速度 (vx, vy, vz) 米/秒
-  float yaw;         // 偏航角 (弧度)
+  float position[3];  // 位置 (x, y, z) 米
+  float velocity[3];  // 速度 (vx, vy, vz) 米/秒
+  float yaw;          // 偏航角 (弧度)
 };
-} // namespace px4GatewayTypes
+}  // namespace px4GatewayTypes
 
 namespace px4Enum {
 // PX4的导航状态枚举，参考px4_msgs/msg/vehicle_status.h
@@ -149,29 +150,29 @@ namespace px4Enum {
  *@brief PX4飞控的导航状态常量
  */
 enum class NavState : uint16_t {
-  MANUAL = 0,       // Manual mode
-  ALTCTL = 1,       // Altitude control mode
-  POSCTL = 2,       // Position control mode
-  AUTO_MISSION = 3, // Auto mission mode
-  AUTO_LOITER = 4,  // Auto loiter mode
-  AUTO_RTL = 5,     // Auto return to launch mode
+  MANUAL = 0,        // Manual mode
+  ALTCTL = 1,        // Altitude control mode
+  POSCTL = 2,        // Position control mode
+  AUTO_MISSION = 3,  // Auto mission mode
+  AUTO_LOITER = 4,   // Auto loiter mode
+  AUTO_RTL = 5,      // Auto return to launch mode
   POSITION_SLOW = 6,
   FREE5 = 7,
   FREE4 = 8,
   FREE3 = 9,
-  ACRO = 10, // Acro mode
+  ACRO = 10,  // Acro mode
   FREE2 = 11,
-  DESCEND = 12,     // Descend mode (no position control)
-  TERMINATION = 13, // Termination mode
+  DESCEND = 12,      // Descend mode (no position control)
+  TERMINATION = 13,  // Termination mode
   OFFBOARD = 14,
-  STAB = 15, // Stabilized mode
+  STAB = 15,  // Stabilized mode
   FREE1 = 16,
-  AUTO_TAKEOFF = 17,       // Takeoff
-  AUTO_LAND = 18,          // Land
-  AUTO_FOLLOW_TARGET = 19, // Auto Follow
-  AUTO_PRECLAND = 20,      // Precision land with landing target
-  ORBIT = 21,              // Orbit in a circle
-  AUTO_VTOL_TAKEOFF = 22,  // Takeoff
+  AUTO_TAKEOFF = 17,        // Takeoff
+  AUTO_LAND = 18,           // Land
+  AUTO_FOLLOW_TARGET = 19,  // Auto Follow
+  AUTO_PRECLAND = 20,       // Precision land with landing target
+  ORBIT = 21,               // Orbit in a circle
+  AUTO_VTOL_TAKEOFF = 22,   // Takeoff
   EXTERNAL1 = 23,
   EXTERNAL2 = 24,
   EXTERNAL3 = 25,
@@ -284,4 +285,4 @@ enum class VehicleCommand : uint32_t {
   VEHICLE_CMD_SET_GPS_GLOBAL_ORIGIN = 100000,
   VEHICLE_CMD_SET_NAV_STATE = 100001
 };
-} // namespace px4Enum
+}  // namespace px4Enum

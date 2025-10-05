@@ -1,38 +1,35 @@
-#include "px4_interface/px4_msgs_cache.hpp"
+#include <gtest/gtest.h>
+
 #include <atomic>
 #include <chrono>
 #include <future>
-#include <gtest/gtest.h>
 #include <random>
 #include <thread>
 #include <vector>
 
-class Px4MsgsCacheTest : public ::testing::Test
-{
-protected:
-  void SetUp() override
-  {
-    cache_ = std::make_unique<Px4MsgsCache>();
+#include "px4_interface/px4_msgs_cache.hpp"
 
+class Px4MsgsCacheTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    cache_ = std::make_unique<Px4MsgsCache>();
     // 创建测试数据
     createTestPositionNED();
     createTestBatteryStatus();
     createTestVehicleStatus();
   }
 
-  void TearDown() override {cache_.reset();}
+  void TearDown() override { cache_.reset(); }
 
-  void createTestPositionNED()
-  {
+  void createTestPositionNED() {
     Eigen::Vector3d translation(1.0, 2.0, 3.0);
     Eigen::Quaterniond orientation(1.0, 0.0, 0.0, 0.0);
     rclcpp::Time timestamp = rclcpp::Clock().now();
     test_position_ =
-      px4Position::PositionNED(translation, orientation, timestamp);
+        px4Position::PositionNED(translation, orientation, timestamp);
   }
 
-  void createTestBatteryStatus()
-  {
+  void createTestBatteryStatus() {
     test_battery_.valid = true;
     test_battery_.timestamp = rclcpp::Clock().now();
     test_battery_.voltage_v = 12.6f;
@@ -41,12 +38,11 @@ protected:
     test_battery_.warning = 0;
   }
 
-  void createTestVehicleStatus()
-  {
+  void createTestVehicleStatus() {
     test_vehicle_.valid = true;
     test_vehicle_.latest_timestamp = rclcpp::Clock().now();
-    test_vehicle_.arming_state = 2; // ARMED
-    test_vehicle_.nav_state = 4;    // AUTO_MISSION
+    test_vehicle_.arming_state = 2;  // ARMED
+    test_vehicle_.nav_state = 4;     // AUTO_MISSION
     test_vehicle_.failsafe = false;
     test_vehicle_.pre_flight_checks_pass = true;
   }
@@ -125,47 +121,45 @@ TEST_F(Px4MsgsCacheTest, ConcurrentReadWrite) {
   std::atomic<bool> test_failed{false};
 
   // 写线程
-  auto writer = std::async(
-    std::launch::async, [this, num_iterations,
-    &test_failed]() {
-      for (int i = 0; i < num_iterations; ++i) {
-        try {
-          Eigen::Vector3d translation(i, i + 1, i + 2);
-          Eigen::Quaterniond orientation(1.0, 0.0, 0.0, 0.0);
-          rclcpp::Time timestamp = rclcpp::Clock().now();
-          px4Position::PositionNED position(translation, orientation, timestamp);
+  auto writer = std::async(std::launch::async, [this, num_iterations,
+                                                &test_failed]() {
+    for (int i = 0; i < num_iterations; ++i) {
+      try {
+        Eigen::Vector3d translation(i, i + 1, i + 2);
+        Eigen::Quaterniond orientation(1.0, 0.0, 0.0, 0.0);
+        rclcpp::Time timestamp = rclcpp::Clock().now();
+        px4Position::PositionNED position(translation, orientation, timestamp);
 
-          cache_->updatePositionNED(position);
+        cache_->updatePositionNED(position);
 
-          // 短暂延迟以增加竞态条件的可能性
-          std::this_thread::sleep_for(std::chrono::microseconds(1));
-        } catch (...) {
-          test_failed = true;
-          break;
-        }
+        // 短暂延迟以增加竞态条件的可能性
+        std::this_thread::sleep_for(std::chrono::microseconds(1));
+      } catch (...) {
+        test_failed = true;
+        break;
       }
-    });
+    }
+  });
 
   // 读线程
   auto reader =
-    std::async(
-    std::launch::async, [this, num_iterations, &test_failed]() {
-      for (int i = 0; i < num_iterations; ++i) {
-        try {
-          auto position = cache_->getPositionNED();
-          // 验证数据的一致性（如果有效的话）
-          if (position.valid) {
-            EXPECT_GE(position.translation.x(), 0);
-            EXPECT_GE(position.translation.y(), 1);
-            EXPECT_GE(position.translation.z(), 2);
+      std::async(std::launch::async, [this, num_iterations, &test_failed]() {
+        for (int i = 0; i < num_iterations; ++i) {
+          try {
+            auto position = cache_->getPositionNED();
+            // 验证数据的一致性（如果有效的话）
+            if (position.valid) {
+              EXPECT_GE(position.translation.x(), 0);
+              EXPECT_GE(position.translation.y(), 1);
+              EXPECT_GE(position.translation.z(), 2);
+            }
+            std::this_thread::sleep_for(std::chrono::microseconds(1));
+          } catch (...) {
+            test_failed = true;
+            break;
           }
-          std::this_thread::sleep_for(std::chrono::microseconds(1));
-        } catch (...) {
-          test_failed = true;
-          break;
         }
-      }
-    });
+      });
 
   writer.wait();
   reader.wait();
@@ -181,10 +175,9 @@ TEST_F(Px4MsgsCacheTest, MultipleWritersRaceCondition) {
   std::atomic<bool> test_failed{false};
 
   for (int thread_id = 0; thread_id < num_threads; ++thread_id) {
-    futures.push_back(
-      std::async(
-        std::launch::async, [this, thread_id, iterations_per_thread,
-        &test_failed]() {
+    futures.push_back(std::async(
+        std::launch::async,
+        [this, thread_id, iterations_per_thread, &test_failed]() {
           std::random_device rd;
           std::mt19937 gen(rd());
           std::uniform_int_distribution<> dis(1, 10);
@@ -195,14 +188,12 @@ TEST_F(Px4MsgsCacheTest, MultipleWritersRaceCondition) {
               float base_value = thread_id * 1000 + i;
 
               // 更新位置数据
-              Eigen::Vector3d translation(
-                base_value, base_value + 1,
-                base_value + 2);
+              Eigen::Vector3d translation(base_value, base_value + 1,
+                                          base_value + 2);
               Eigen::Quaterniond orientation(1.0, 0.0, 0.0, 0.0);
               rclcpp::Time timestamp = rclcpp::Clock().now();
-              px4Position::PositionNED position(
-                translation, orientation,
-                timestamp);
+              px4Position::PositionNED position(translation, orientation,
+                                                timestamp);
               cache_->updatePositionNED(position);
 
               // 更新电池状态
@@ -237,7 +228,7 @@ TEST_F(Px4MsgsCacheTest, MultipleWritersRaceCondition) {
   }
 
   // 等待所有线程完成
-  for (auto & future : futures) {
+  for (auto& future : futures) {
     future.wait();
   }
 
@@ -266,8 +257,7 @@ TEST_F(Px4MsgsCacheTest, ReaderStarvationTest) {
 
   // 启动写线程
   for (int i = 0; i < num_writers; ++i) {
-    futures.push_back(
-      std::async(
+    futures.push_back(std::async(
         std::launch::async, [this, i, &stop_test, &successful_writes]() {
           int counter = 0;
           while (!stop_test) {
@@ -275,9 +265,8 @@ TEST_F(Px4MsgsCacheTest, ReaderStarvationTest) {
               Eigen::Vector3d translation(counter, counter + 1, counter + 2);
               Eigen::Quaterniond orientation(1.0, 0.0, 0.0, 0.0);
               rclcpp::Time timestamp = rclcpp::Clock().now();
-              px4Position::PositionNED position(
-                translation, orientation,
-                timestamp);
+              px4Position::PositionNED position(translation, orientation,
+                                                timestamp);
 
               cache_->updatePositionNED(position);
               successful_writes++;
@@ -295,8 +284,7 @@ TEST_F(Px4MsgsCacheTest, ReaderStarvationTest) {
   // 启动读线程
   for (int i = 0; i < num_readers; ++i) {
     futures.push_back(
-      std::async(
-        std::launch::async, [this, &stop_test, &successful_reads]() {
+        std::async(std::launch::async, [this, &stop_test, &successful_reads]() {
           while (!stop_test) {
             try {
               auto position = cache_->getPositionNED();
@@ -317,7 +305,7 @@ TEST_F(Px4MsgsCacheTest, ReaderStarvationTest) {
   stop_test = true;
 
   // 等待所有线程完成
-  for (auto & future : futures) {
+  for (auto& future : futures) {
     future.wait();
   }
 
@@ -340,9 +328,8 @@ TEST_F(Px4MsgsCacheTest, HighConcurrencyStressTest) {
 
   for (int thread_id = 0; thread_id < num_threads; ++thread_id) {
     futures.push_back(
-      std::async(
-        std::launch::async, [this, thread_id, iterations_per_thread,
-        &total_operations, &test_failed]() {
+        std::async(std::launch::async, [this, thread_id, iterations_per_thread,
+                                        &total_operations, &test_failed]() {
           std::random_device rd;
           std::mt19937 gen(rd());
           std::uniform_int_distribution<> operation_dis(0, 5);
@@ -358,9 +345,8 @@ TEST_F(Px4MsgsCacheTest, HighConcurrencyStressTest) {
                   Eigen::Vector3d translation(thread_id, i, thread_id + i);
                   Eigen::Quaterniond orientation(1.0, 0.0, 0.0, 0.0);
                   rclcpp::Time timestamp = rclcpp::Clock().now();
-                  px4Position::PositionNED position(
-                    translation, orientation,
-                    timestamp);
+                  px4Position::PositionNED position(translation, orientation,
+                                                    timestamp);
                   cache_->updatePositionNED(position);
                   break;
                 }
@@ -420,7 +406,7 @@ TEST_F(Px4MsgsCacheTest, HighConcurrencyStressTest) {
   }
 
   // 等待所有线程完成
-  for (auto & future : futures) {
+  for (auto& future : futures) {
     future.wait();
   }
 
@@ -437,56 +423,55 @@ TEST_F(Px4MsgsCacheTest, DataConsistencyTest) {
   std::atomic<bool> inconsistency_detected{false};
 
   // 写线程 - 写入关联的数据
-  auto writer = std::async(
-    std::launch::async, [this, num_iterations]() {
-      for (int i = 0; i < num_iterations; ++i) {
-        // 使用相同的序列号来关联数据
-        float sequence = static_cast<float>(i);
-        rclcpp::Time timestamp = rclcpp::Clock().now();
+  auto writer = std::async(std::launch::async, [this, num_iterations]() {
+    for (int i = 0; i < num_iterations; ++i) {
+      // 使用相同的序列号来关联数据
+      float sequence = static_cast<float>(i);
+      rclcpp::Time timestamp = rclcpp::Clock().now();
 
-        // 位置数据使用序列号
-        Eigen::Vector3d translation(sequence, sequence, sequence);
-        Eigen::Quaterniond orientation(1.0, 0.0, 0.0, 0.0);
-        px4Position::PositionNED position(translation, orientation, timestamp);
-        cache_->updatePositionNED(position);
+      // 位置数据使用序列号
+      Eigen::Vector3d translation(sequence, sequence, sequence);
+      Eigen::Quaterniond orientation(1.0, 0.0, 0.0, 0.0);
+      px4Position::PositionNED position(translation, orientation, timestamp);
+      cache_->updatePositionNED(position);
 
-        // 电池电压也使用序列号
-        px4Status::BatteryStatus battery;
-        battery.valid = true;
-        battery.timestamp = timestamp;
-        battery.voltage_v = 12.0f + sequence * 0.001f;
-        battery.current_a = 2.0f;
-        battery.remaining = 0.8f;
-        battery.warning = 0;
-        cache_->updateBatteryStatus(battery);
+      // 电池电压也使用序列号
+      px4Status::BatteryStatus battery;
+      battery.valid = true;
+      battery.timestamp = timestamp;
+      battery.voltage_v = 12.0f + sequence * 0.001f;
+      battery.current_a = 2.0f;
+      battery.remaining = 0.8f;
+      battery.warning = 0;
+      cache_->updateBatteryStatus(battery);
 
-        std::this_thread::sleep_for(std::chrono::microseconds(10));
-      }
-    });
+      std::this_thread::sleep_for(std::chrono::microseconds(10));
+    }
+  });
 
   // 读线程 - 验证数据的一致性
   auto reader = std::async(
-    std::launch::async, [this, num_iterations, &inconsistency_detected]() {
-      for (int i = 0; i < num_iterations * 2; ++i) {
-        auto position = cache_->getPositionNED();
-        auto battery = cache_->getBatteryStatus();
+      std::launch::async, [this, num_iterations, &inconsistency_detected]() {
+        for (int i = 0; i < num_iterations * 2; ++i) {
+          auto position = cache_->getPositionNED();
+          auto battery = cache_->getBatteryStatus();
 
-        // 如果数据有效，检查是否一致
-        if (position.valid && battery.valid) {
-          float pos_sequence = position.translation.x();
-          float battery_sequence = (battery.voltage_v - 12.0f) / 0.001f;
+          // 如果数据有效，检查是否一致
+          if (position.valid && battery.valid) {
+            float pos_sequence = position.translation.x();
+            float battery_sequence = (battery.voltage_v - 12.0f) / 0.001f;
 
-          // 允许一定的浮点误差和并发更新差异
-          if (std::abs(pos_sequence - battery_sequence) > 5.0f) {
-            std::cout << "Inconsistency detected: pos=" << pos_sequence
-                      << ", battery=" << battery_sequence << std::endl;
-            inconsistency_detected = true;
+            // 允许一定的浮点误差和并发更新差异
+            if (std::abs(pos_sequence - battery_sequence) > 5.0f) {
+              std::cout << "Inconsistency detected: pos=" << pos_sequence
+                        << ", battery=" << battery_sequence << std::endl;
+              inconsistency_detected = true;
+            }
           }
-        }
 
-        std::this_thread::sleep_for(std::chrono::microseconds(5));
-      }
-    });
+          std::this_thread::sleep_for(std::chrono::microseconds(5));
+        }
+      });
 
   writer.wait();
   reader.wait();
@@ -495,8 +480,7 @@ TEST_F(Px4MsgsCacheTest, DataConsistencyTest) {
   EXPECT_FALSE(inconsistency_detected);
 }
 
-int main(int argc, char ** argv)
-{
+int main(int argc, char** argv) {
   rclcpp::init(argc, argv);
   ::testing::InitGoogleTest(&argc, argv);
   int result = RUN_ALL_TESTS();

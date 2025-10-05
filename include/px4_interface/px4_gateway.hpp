@@ -1,6 +1,4 @@
 #pragma once
-#include "px4_comm_types.hpp"
-#include "px4_msgs_cache.hpp"
 #include <memory>
 #include <px4_interface/msg/battery_status.hpp>
 #include <px4_interface/msg/position_ned.hpp>
@@ -14,8 +12,11 @@
 #include <rclcpp/rclcpp.hpp>
 #include <string>
 
+#include "px4_comm_types.hpp"
+#include "px4_msgs_cache.hpp"
+
 class PX4Gateway : public rclcpp::Node {
-public:
+ public:
   /**
    * @brief 构造函数
    * @param options ROS2节点选项
@@ -82,7 +83,7 @@ public:
   void setLandMode();
   void triggerEmergencyStop();
 
-private:
+ private:
   //===============内部函数===============
   /**
    * @brief 初始化函数，在构造函数中调用，构造所有的订阅器和发布器
@@ -124,7 +125,7 @@ private:
   // PX4消息缓存
   std::shared_ptr<Px4MsgsCache> px4_msgs_cache_;
 
-  const int offboard_control_rate_hz_ = 50; // 心跳频率50Hz
+  const int offboard_control_rate_hz_ = 50;  // 心跳频率50Hz
   bool offboard_position_control_ = true;
   bool offboard_velocity_control_ = true;
   rclcpp::TimerBase::SharedPtr offboard_control_timer_;
