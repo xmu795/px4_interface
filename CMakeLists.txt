@@ -1,18 +1,36 @@
-cmake_minimum_required(VERSION 3.8)
-project(px4_interface)
+cmake_minimum_required(VERSION 3.14) # 3.14+ 支持更丰富的 target_* 功能与生成表达式改进
 
-if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+# ============================= 项目信息与全局策略 =============================
+project(px4_interface
+  VERSION 0.1.0
+  DESCRIPTION "PX4 相关的中间层接口（缓存 + 网关），同时包含本包自定义 msg"
+  LANGUAGES CXX C
+)
+
+# 避免使用全局 add_compile_options 影响所有 target；
+# 更推荐在每个 target 上用 target_compile_options 精准设置。
+# 这里保留一个最低限度的全局策略：启用严格警告（仅对 GNU/Clang）。
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-# find dependencies
+# 为了鼓励使用更现代的 C++ 标准（并保持编译一致性），强制 C++17。
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# ============================= 依赖查找 =============================
+# ament_cmake 是 ROS 2 的基础构建系统封装。
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
-find_package(Eigen3 REQUIRED)
-find_package(px4_msgs REQUIRED)
-find_package(rosidl_default_generators REQUIRED)
+find_package(Eigen3 REQUIRED)          # 头文件库（INTERFACE 库），不会产生链接库
+find_package(px4_msgs REQUIRED)        # 来自 px4_msgs 包的已生成消息接口
+find_package(rosidl_default_generators REQUIRED) # 生成本包自定义消息所需
 
+# ============================= 自定义消息生成 =============================
+# 如果需要在别的包使用这些 msg，需要在 package.xml 中声明依赖
+# 并且保证 rosidl_generate_interfaces 在 ament_package() 之前调用。
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/VehicleStatus.msg"
   "msg/PositionNED.msg"
@@ -20,58 +38,138 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   DEPENDENCIES builtin_interfaces
 )
 
-# include directories
-include_directories(include ${CMAKE_CURRENT_BINARY_DIR}/rosidl_generator_cpp)
+# 生成的 C++ 头会放在构建目录（build/ 本包）内，对应生成路径已经被 rosidl 系统管理。
+# 旧式写法 include_directories(...) 会污染全局作用域，改为对 target 指定。
 
-# Create the px4_msgs_cache library
-add_library(px4_msgs_cache src/px4_msgs_cache.cpp)
-target_include_directories(px4_msgs_cache PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
-    ${EIGEN3_INCLUDE_DIR} # Eigen3 include directory
-)
-target_link_libraries(px4_msgs_cache ${rclcpp_LIBRARIES})
-ament_target_dependencies(px4_msgs_cache rclcpp std_msgs Eigen3 rosidl_default_runtime)
+# ============================= 公共头文件基路径变量 =============================
+set(PROJECT_PUBLIC_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-# Create the px4_gateway library
-add_library(px4_gateway src/px4_gateway.cpp)
-target_include_directories(px4_gateway PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
-    ${EIGEN3_INCLUDE_DIR} # Eigen3 include directory
-)
-target_link_libraries(px4_gateway px4_msgs_cache ${rclcpp_LIBRARIES})
-ament_target_dependencies(px4_gateway rclcpp std_msgs Eigen3 px4_msgs rosidl_default_runtime)
-
-# Install targets
-install(TARGETS px4_msgs_cache px4_gateway
-  DESTINATION lib/${PROJECT_NAME}
+# ============================= px4_msgs_cache 库 =============================
+add_library(px4_msgs_cache
+  src/px4_msgs_cache.cpp
 )
 
-# Install headers
-install(DIRECTORY include/
+# 指定此库的“使用接口”包含目录：
+target_include_directories(px4_msgs_cache
+  PUBLIC
+    $<BUILD_INTERFACE:${PROJECT_PUBLIC_INCLUDE_DIR}>
+    $<INSTALL_INTERFACE:include>
+)
+
+# 链接依赖：使用 ament_target_dependencies 让 ROS 2 自动追加所需 include 与库。
+ament_target_dependencies(px4_msgs_cache
+  PUBLIC  # 这些依赖对使用者可见（例如使用本库的其他目标会自动继承）
+    rclcpp
+    std_msgs
+    Eigen3 # ament 会追加包含；某些平台需显式 target_link_libraries(Eigen3::Eigen)
+    rosidl_default_runtime # 使用已生成的消息运行时支持
+)
+
+# 某些发行版的 Eigen3 包只通过 INTERFACE 目标 Eigen3::Eigen 提供包含路径，这里显式链接一次
+target_link_libraries(px4_msgs_cache PUBLIC Eigen3::Eigen)
+
+# 额外编译选项（只作用于该库）
+target_compile_options(px4_msgs_cache
+  PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang>:-Wconversion -Wshadow>
+)
+
+# ============================= px4_gateway 库 =============================
+add_library(px4_gateway
+  src/px4_gateway.cpp
+)
+
+target_include_directories(px4_gateway
+  PUBLIC
+    $<BUILD_INTERFACE:${PROJECT_PUBLIC_INCLUDE_DIR}>
+    $<INSTALL_INTERFACE:include>
+  PRIVATE
+    ${CMAKE_CURRENT_BINARY_DIR}/rosidl_generator_cpp
+)
+
+# 这里依赖前一个自定义库 px4_msgs_cache 以及额外消息包 px4_msgs。
+target_link_libraries(px4_gateway
+  PUBLIC
+    px4_msgs_cache
+    Eigen3::Eigen # 显式使用 Eigen 导出的接口目标，确保包含目录存在
+)
+
+ament_target_dependencies(px4_gateway
+  PUBLIC
+    rclcpp
+    std_msgs
+    Eigen3
+    px4_msgs           # 来自外部包的消息类型
+    rosidl_default_runtime
+)
+
+# 确保在编译 px4_gateway 之前消息代码已生成（__cpp 目标由 rosidl 生成）
+add_dependencies(px4_gateway ${PROJECT_NAME}__cpp)
+
+# 如需为不同 target 设置定义，可使用 target_compile_definitions：
+# target_compile_definitions(px4_gateway PRIVATE SOME_FLAG=1)
+
+# ============================= 安装 (Install) =============================
+# 安装库到 lib；安装头文件到 include；
+# 根据 ROS 2 约定放在 lib/${PROJECT_NAME} 不是必须——对纯库包可直接放 lib。
+install(TARGETS
+  px4_msgs_cache
+  px4_gateway
+  EXPORT ${PROJECT_NAME}-targets           # 导出安装时的 target 描述，便于外部 find_package
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION lib/${PROJECT_NAME}
+  INCLUDES DESTINATION include
+)
+
+install(DIRECTORY ${PROJECT_PUBLIC_INCLUDE_DIR}/
   DESTINATION include
+  FILES_MATCHING PATTERN "*.hpp" PATTERN "*.h"
 )
 
+# 如果有资源/launch 文件，也可：
+# install(DIRECTORY launch/ DESTINATION share/${PROJECT_NAME}/launch)
+
+# ============================= 测试 (可选) =============================
 if(BUILD_TESTING)
+  # ament_lint_auto: 自动化静态检查集合（风格/版权等）
   find_package(ament_lint_auto REQUIRED)
   find_package(ament_cmake_gtest REQUIRED)
-  # the following line skips the linter which checks for copyrights
-  # comment the line when a copyright and license is added to all source files
-  set(ament_cmake_copyright_FOUND TRUE)
-  # the following line skips cpplint (only works in a git repo)
-  # comment the line when this package is in a git repo and when
-  # a copyright and license is added to all source files
+
+  # 下面两个变量设置为 TRUE 用于临时跳过某些检查，正式项目建议删除：
   set(ament_cmake_cpplint_FOUND TRUE)
+  set(ament_cmake_copyright_FOUND TRUE)
+
   ament_lint_auto_find_test_dependencies()
-  # Add unit tests
+
   ament_add_gtest(test_px4_msgs_cache test/test_px4_msgs_cache.cpp)
-  target_include_directories(test_px4_msgs_cache PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>
-  )
-  target_link_libraries(test_px4_msgs_cache px4_msgs_cache)
-  ament_target_dependencies(test_px4_msgs_cache rclcpp std_msgs Eigen3)
+  if(TARGET test_px4_msgs_cache)
+    target_link_libraries(test_px4_msgs_cache px4_msgs_cache)
+    target_include_directories(test_px4_msgs_cache PRIVATE ${PROJECT_PUBLIC_INCLUDE_DIR})
+    ament_target_dependencies(test_px4_msgs_cache rclcpp std_msgs Eigen3)
+  endif()
 endif()
 
+# ============================= 包导出 =============================
+# ament_export_targets 导出本包的 CMake target，供下游包通过 find_package 使用。
+ament_export_targets(${PROJECT_NAME}-targets HAS_LIBRARY_TARGET)
+
+# 导出依赖，确保 find_package(px4_interface) 时自动带上包含路径/库与依赖的顺序。
+ament_export_dependencies(
+  rclcpp
+  std_msgs
+  Eigen3
+  px4_msgs
+  rosidl_default_runtime
+)
+
+# ament 包尾：必须在 rosidl_generate_interfaces 之后。
 ament_package()
+
+# ============================= 新手快速 FAQ =============================
+# 1. 为什么不用 include_directories()?  -> 它是全局的，会影响所有 target；现代写法更推荐 target_include_directories 精准控制作用域。
+# 2. PUBLIC / PRIVATE / INTERFACE 有何区别? -> 传播范围：PUBLIC=自己+依赖者；PRIVATE=仅自己；INTERFACE=自己没有源或只传播给依赖者。
+# 3. ament_target_dependencies 做了什么? -> 相当于 target_link_libraries + 自动追加 include 路径 + 添加系统依赖，减少手写。
+# 4. 如何新增一个源文件? -> 把文件追加到 add_library 的列表，或使用 target_sources。
+# 5. 如何添加可执行节点? -> add_executable(node_name src/node.cpp); 然后 ament_target_dependencies(node_name rclcpp ...) 并 install(TARGETS node_name ... RUNTIME DESTINATION lib/${PROJECT_NAME})。
+# 6. 为什么导出 targets? -> 便于下游使用 find_package(px4_interface) 时拿到配置 & 链接信息，支持更好的复用。
+

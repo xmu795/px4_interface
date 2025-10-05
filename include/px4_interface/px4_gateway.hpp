@@ -43,7 +43,7 @@ public:
    * @return true 连接正常
    * @return false 连接异常
    * @warning
-   * 该函数检测的是px4是否已经实现了/fmu/out/*话题的发布者，不能够检测更深层次的连接问题
+   * 该函数检测的是px4是否已经实现了/fmu/out/<topic>话题的发布者，不能够检测更深层次的连接问题
    */
   bool checkPx4Publishers() const;
   //=====运动控制命令=====

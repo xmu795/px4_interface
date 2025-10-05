@@ -1,4 +1,5 @@
 #include "px4_interface/px4_gateway.hpp"
+#include "px4_interface/msg_converters.hpp"
 #include "px4_interface/px4_msgs_cache.hpp"
 #include <exception>
 #include <memory>
@@ -36,40 +37,16 @@ bool PX4Gateway::checkPx4Publishers() const {
   return true;
 }
 
-void PX4Gateway::publishCache() const { // Todo: 代码重复率过高，考虑优化
-  auto status = px4_msgs_cache_->getVehicleStatus();
-  if (status.valid) {
-    px4_interface::msg::VehicleStatus msg;
-    msg.valid = status.valid;
-    msg.latest_timestamp = status.latest_timestamp;
-    msg.arming_state = status.arming_state;
-    msg.nav_state = status.nav_state;
-    msg.failsafe = status.failsafe;
-    msg.pre_flight_checks_pass = status.pre_flight_checks_pass;
-    vehicle_status_publisher_->publish(msg);
-  }
-  auto position = px4_msgs_cache_->getPositionNED();
-  if (position.valid) {
-    px4_interface::msg::PositionNED msg;
-    msg.valid = position.valid;
-    msg.translation = {position.translation.x(), position.translation.y(),
-                       position.translation.z()};
-    msg.orientation = {position.orientation.w(), position.orientation.x(),
-                       position.orientation.y(), position.orientation.z()};
-    msg.timestamp = position.timestamp;
-    vehicle_local_position_publisher_->publish(msg);
-  }
-  auto battery = px4_msgs_cache_->getBatteryStatus();
-  if (battery.valid) {
-    px4_interface::msg::BatteryStatus msg;
-    msg.valid = battery.valid;
-    msg.timestamp = battery.timestamp;
-    msg.voltage_v = battery.voltage_v;
-    msg.current_a = battery.current_a;
-    msg.remaining = battery.remaining;
-    msg.warning = battery.warning;
-    battery_status_publisher_->publish(msg);
-  }
+template <typename Data, typename PublisherPtr>
+void publish(const Data &data, PublisherPtr publisher) {
+  auto msg = MsgConverters::convert(data);
+  publisher->publish(msg);
+}
+
+void PX4Gateway::publishCache() const {
+  publish(px4_msgs_cache_->getVehicleStatus(), vehicle_status_publisher_);
+  publish(px4_msgs_cache_->getPositionNED(), vehicle_local_position_publisher_);
+  publish(px4_msgs_cache_->getBatteryStatus(), battery_status_publisher_);
 }
 
 void PX4Gateway::chooseControlMethod(bool position_control,
@@ -99,7 +76,7 @@ void PX4Gateway::setTarget(const px4_msgs::msg::TrajectorySetpoint &target) {
 void PX4Gateway::publishVehicleCommand(const px4Enum::VehicleCommand command,
                                        const float param1, const float param2) {
   px4_msgs::msg::VehicleCommand vehicle_command_msg;
-  vehicle_command_msg.command = static_cast<uint16_t>(command);
+  vehicle_command_msg.command = static_cast<uint32_t>(command);
   vehicle_command_msg.param1 = param1;
   vehicle_command_msg.param2 = param2;
   vehicle_command_msg.target_system = 1;    // 通常为1
