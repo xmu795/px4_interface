@@ -51,10 +51,15 @@ void PX4Gateway::publishCache() const {
 
 void PX4Gateway::chooseControlMethod(bool position_control,
                                      bool velocity_control) {
+  // TODO(TEST-LOW):
+  // 简单赋值逻辑，可在补充高优先级测试后再通过轻量测试覆盖边界组合。
   offboard_position_control_ = position_control;
   offboard_velocity_control_ = velocity_control;
 }
 
+// TODO(TEST-HIGH): 为 setTarget(setpoint)
+// 添加测试，校验位置/速度向量与时间戳映射至 TrajectorySetpoint
+// 消息字段的正确性。
 void PX4Gateway::setTarget(const px4GatewayTypes::setpoint &target) {
   px4_msgs::msg::TrajectorySetpoint
       traj_setpoint_msg; // Todo: 优化，这里的转化过于机械
@@ -69,10 +74,14 @@ void PX4Gateway::setTarget(const px4GatewayTypes::setpoint &target) {
   trajectory_setpoint_publisher_->publish(traj_setpoint_msg);
 }
 
+// TODO(TEST-LOW): setTarget(msg)
+// 仅简单转发，后续可使用轻量发布捕获测试验证原样透传。
 void PX4Gateway::setTarget(const px4_msgs::msg::TrajectorySetpoint &target) {
   trajectory_setpoint_publisher_->publish(target);
 }
 
+// TODO(TEST-HIGH): 为 publishVehicleCommand 编写测试，确保命令枚举与参数字段、
+// target/source 系统组件号以及时间戳被正确设置。
 void PX4Gateway::publishVehicleCommand(const px4Enum::VehicleCommand command,
                                        const float param1, const float param2) {
   px4_msgs::msg::VehicleCommand vehicle_command_msg;
@@ -89,18 +98,24 @@ void PX4Gateway::publishVehicleCommand(const px4Enum::VehicleCommand command,
 }
 
 void PX4Gateway::setArmMode() {
+  // TODO(TEST-MED): 补充单元测试覆盖 setArmMode/DisarmMode 等封装命令，验证调用
+  // publishVehicleCommand 时参数取值正确。
   publishVehicleCommand(
       px4Enum::VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM, 1.0f, 0.0f);
   RCLCPP_INFO(this->get_logger(), "Sent ARM command to PX4");
 }
 
 void PX4Gateway::setDisarmMode() {
+  // TODO(TEST-MED): 与 setArmMode 相同，验证解锁/锁定命令的参数分支。
   publishVehicleCommand(
       px4Enum::VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM, 0.0f, 0.0f);
   RCLCPP_INFO(this->get_logger(), "Sent DISARM command to PX4");
 }
 
 void PX4Gateway::setOffboardMode() {
+  // TODO(TEST-MED): 覆盖
+  // setOffboardMode/setLandMode/triggerEmergencyStop，确保高层 快捷接口向
+  // publishVehicleCommand 提供的命令和参数组合正确。
   publishVehicleCommand(px4Enum::VehicleCommand::VEHICLE_CMD_DO_SET_MODE, 1.0f,
                         6.0f);
   RCLCPP_INFO(this->get_logger(), "Sent OFFBOARD mode command to PX4");
@@ -119,6 +134,8 @@ void PX4Gateway::triggerEmergencyStop() {
 }
 
 void PX4Gateway::init() {
+  // TODO(TEST-HIGH): 设计基于rclcpp::Node的测试夹具，验证 init()
+  // 创建的发布者、订阅者 与定时器行为，特别是订阅回调更新 Px4MsgsCache 的路径。
   // 提供给PX4的发布者
   offboard_control_mode_publisher_ =
       this->create_publisher<px4_msgs::msg::OffboardControlMode>(
@@ -194,6 +211,9 @@ void PX4Gateway::init() {
 
 void PX4Gateway::publishOffboardControlMode(const bool position_control,
                                             const bool velocity_control) {
+  // TODO(TEST-HIGH): 编写测试验证 chooseControlMethod 与
+  // publishOffboardControlMode 协同工作时，Offboard
+  // 控制模式标志位与心跳频率设置正确。
   px4_msgs::msg::OffboardControlMode offboard_msg;
   offboard_msg.position = position_control; // 位置控制
   offboard_msg.velocity = velocity_control; // 速度控制

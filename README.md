@@ -182,3 +182,4 @@ cd /home/cfly/ros2_ws/src/px4_interface
 colcon test --packages-select px4_interface --event-handlers console_direct+
 colcon test-result --all --verbose
 ```
+

@@ -147,6 +147,19 @@ if(BUILD_TESTING)
     target_include_directories(test_px4_msgs_cache PRIVATE ${PROJECT_PUBLIC_INCLUDE_DIR})
     ament_target_dependencies(test_px4_msgs_cache rclcpp std_msgs Eigen3)
   endif()
+
+  ament_add_gtest(test_px4_gateway test/test_px4_gateway.cpp)
+  if(TARGET test_px4_gateway)
+    target_link_libraries(test_px4_gateway px4_gateway px4_msgs_cache Eigen3::Eigen)
+    target_include_directories(test_px4_gateway PRIVATE
+      ${PROJECT_PUBLIC_INCLUDE_DIR}
+      ${CMAKE_CURRENT_BINARY_DIR}/rosidl_generator_cpp
+    )
+    rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
+    target_link_libraries(test_px4_gateway ${cpp_typesupport_target})
+    ament_target_dependencies(test_px4_gateway rclcpp std_msgs Eigen3 px4_msgs rosidl_default_runtime)
+    add_dependencies(test_px4_gateway ${PROJECT_NAME}__cpp)
+  endif()
 endif()
 
 # ============================= 包导出 =============================
