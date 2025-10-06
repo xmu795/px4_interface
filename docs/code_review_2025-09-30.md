@@ -52,7 +52,7 @@
 	- 重写 `publishCache()`：无论 `valid` 与否都发布快照，失效时直接写出 `valid=false`。
 	- 提取公共转换函数，替换三段重复的字段拷贝。
 
-- [ ] **恢复 PX4 时间戳**
+- [x] **恢复 PX4 时间戳**
 	- 订阅回调使用消息原始 `timestamp`/`timestamp_sample`。
 	- 在自定义消息中增加 `received_time` 字段或附加诊断信息。
 
@@ -60,11 +60,11 @@
 	- 设计新的聚合结构（含车辆状态、位置、电池以及版本号）。
 	- `publishCache()` 仅通过一次锁获取该聚合体，确保读取一致。
 
-- [ ] **初始化基础位置结构**
+- [x] **初始化基础位置结构**
 	- 修改 `BasicPosition` 默认构造，将 `translation` 置零、`orientation` 设为单位四元数。
 	- 增补单元测试确保默认构造无未定义数据。
 
-- [ ] **精简目标设定接口**
+- [x] **精简目标设定接口**
 	- 让 `px4GatewayTypes::setpoint` 与 `px4_msgs::msg::TrajectorySetpoint` 共享构造器或显式转换。
 	- 删除手动逐字段赋值的样板代码。
 

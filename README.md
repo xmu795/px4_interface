@@ -48,7 +48,7 @@ flowchart LR
 | 发布 | `/fmu/in/trajectory_setpoint` | `px4_msgs/msg/TrajectorySetpoint` | Offboard 位置/速度设定点 |
 | 发布 | `/fmu/in/vehicle_command` | `px4_msgs/msg/VehicleCommand` | 解锁、模式切换等命令 |
 | 发布 | `/cache/vehicle_status` | `px4_interface/msg/VehicleStatus` | 缓存后的飞控状态，时间戳自节点时钟 |
-| 发布 | `/cache/vehicle_odometry` | `px4_interface/msg/PositionNED` | 缓存后的位置信息，含四元数姿态 |
+| 发布 | `/cache/vehicle_odometry` | `px4_interface/msg/PoseNED` | 缓存后的位姿信息（含位置、速度、姿态） |
 | 发布 | `/cache/battery_status` | `px4_interface/msg/BatteryStatus` | 缓存后的电池信息 |
 
 ### 自定义消息字段
@@ -64,12 +64,13 @@ flowchart LR
 | `failsafe` | `bool` | 是否处于故障保护 |
 | `pre_flight_checks_pass` | `bool` | 飞行前自检是否通过 |
 
-#### `px4_interface/msg/PositionNED`
+#### `px4_interface/msg/PoseNED`
 
 | 字段 | 类型 | 描述 |
 | --- | --- | --- |
 | `valid` | `bool` | `vehicle_odometry` 消息转换后是否有效 |
 | `translation` | `float64[3]` | NED 坐标位置 (m) |
+| `velocity` | `float64[3]` | NED 线速度 (m/s) |
 | `orientation` | `float64[4]` | 四元数 `(w, x, y, z)`；PX4 默认无姿态信息时为单位四元数 |
 | `timestamp` | `builtin_interfaces/Time` | Gateway 获取数据时间 |
 

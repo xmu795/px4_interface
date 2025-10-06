@@ -126,8 +126,17 @@ install(DIRECTORY ${PROJECT_PUBLIC_INCLUDE_DIR}/
   FILES_MATCHING PATTERN "*.hpp" PATTERN "*.h"
 )
 
-# 如果有资源/launch 文件，也可：
-# install(DIRECTORY launch/ DESTINATION share/${PROJECT_NAME}/launch)
+# 安装脚本
+install(
+  PROGRAMS scripts/mock_px4_cache_publisher.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+# 安装 Launch 文件
+install(
+  DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME}
+)
 
 # ============================= 测试 (可选) =============================
 if(BUILD_TESTING)
@@ -178,6 +187,7 @@ ament_export_dependencies(
 
 # ament 包尾：必须在 rosidl_generate_interfaces 之后。
 ament_package()
+
 
 # ============================= 新手快速 FAQ =============================
 # 1. 为什么不用 include_directories()?  -> 它是全局的，会影响所有 target；现代写法更推荐 target_include_directories 精准控制作用域。
