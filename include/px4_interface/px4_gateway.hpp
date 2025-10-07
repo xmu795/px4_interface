@@ -12,6 +12,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <string>
 
+#include "process_manager.hpp"
 #include "px4_comm_types.hpp"
 #include "px4_msgs_cache.hpp"
 
@@ -153,4 +154,10 @@ class PX4Gateway : public rclcpp::Node {
   bool offboard_velocity_control_ = true;
   rclcpp::TimerBase::SharedPtr offboard_control_timer_;
   rclcpp::TimerBase::SharedPtr cache_publish_timer_;
+
+  // MicroDDS Agent 进程管理器
+  std::string agent_executable_ = "MicroXRCEAgent";
+  std::vector<std::string> agent_args_ = {"serial", "-D", "/dev/ttyTHS1", "-b",
+                                          "921600"};
+  ProcessManager dds_agent_process_;
 };

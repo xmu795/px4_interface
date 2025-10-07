@@ -105,6 +105,7 @@ target_include_directories(px4_gateway
 target_link_libraries(px4_gateway
   PUBLIC
     px4_msgs_cache
+    process_manager
     Eigen3::Eigen # 显式使用 Eigen 导出的接口目标，确保包含目录存在
 )
 
@@ -123,6 +124,18 @@ add_dependencies(px4_gateway ${PROJECT_NAME}__cpp)
 # 如需为不同 target 设置定义，可使用 target_compile_definitions：
 # target_compile_definitions(px4_gateway PRIVATE SOME_FLAG=1)
 
+# ============================= px4_gateway_node 可执行文件 =============================
+add_executable(px4_gateway_node src/main.cpp)
+
+target_link_libraries(px4_gateway_node px4_gateway)
+
+rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
+target_link_libraries(px4_gateway_node ${cpp_typesupport_target})
+
+target_include_directories(px4_gateway_node PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/rosidl_generator_cpp)
+
+add_dependencies(px4_gateway_node ${PROJECT_NAME}__cpp)
+
 # ============================= 安装 (Install) =============================
 # 安装库到 lib；安装头文件到 include；
 # 根据 ROS 2 约定放在 lib/${PROJECT_NAME} 不是必须——对纯库包可直接放 lib。
@@ -130,6 +143,7 @@ install(TARGETS
   process_manager
   px4_msgs_cache
   px4_gateway
+  px4_gateway_node
   EXPORT ${PROJECT_NAME}-targets           # 导出安装时的 target 描述，便于外部 find_package
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib

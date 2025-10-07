@@ -25,6 +25,12 @@ using namespace std::chrono_literals;
 
 namespace {
 
+rclcpp::NodeOptions MakeGatewayTestOptions() {
+  rclcpp::NodeOptions options;
+  options.append_parameter_override("auto_start_dds_agent", false);
+  return options;
+}
+
 class CacheSubscriberNode : public rclcpp::Node {
  public:
   CacheSubscriberNode() : rclcpp::Node("px4_gateway_test_listener") {
@@ -260,7 +266,8 @@ TEST_F(Px4GatewayPublishCacheTest, PublishesCachedMessagesToAllTopics) {
   pose.latest_timestamp = pose.msg_timestamp;
   cache->updateVehiclePose(pose);
 
-  auto gateway = std::make_shared<PX4Gateway>(rclcpp::NodeOptions(), cache);
+  auto gateway =
+      std::make_shared<PX4Gateway>(MakeGatewayTestOptions(), cache);
   auto listener = std::make_shared<CacheSubscriberNode>();
 
   rclcpp::executors::SingleThreadedExecutor exec;
@@ -327,7 +334,8 @@ TEST_F(Px4GatewayPublishCacheTest, PublishesCachedMessagesToAllTopics) {
 TEST_F(Px4GatewayPublishCacheTest,
        SetTargetPublishesConvertedTrajectorySetpoint) {
   auto cache = std::make_shared<Px4MsgsCache>();
-  auto gateway = std::make_shared<PX4Gateway>(rclcpp::NodeOptions(), cache);
+  auto gateway =
+      std::make_shared<PX4Gateway>(MakeGatewayTestOptions(), cache);
   auto listener = std::make_shared<TrajectorySetpointListener>();
 
   rclcpp::executors::SingleThreadedExecutor exec;
@@ -385,7 +393,8 @@ TEST_F(Px4GatewayPublishCacheTest,
 
 TEST_F(Px4GatewayPublishCacheTest, PublishVehicleCommandFillsFieldsCorrectly) {
   auto cache = std::make_shared<Px4MsgsCache>();
-  auto gateway = std::make_shared<PX4Gateway>(rclcpp::NodeOptions(), cache);
+  auto gateway =
+      std::make_shared<PX4Gateway>(MakeGatewayTestOptions(), cache);
   auto listener = std::make_shared<VehicleCommandListener>();
 
   rclcpp::executors::SingleThreadedExecutor exec;
@@ -441,7 +450,8 @@ TEST_F(Px4GatewayPublishCacheTest, PublishVehicleCommandFillsFieldsCorrectly) {
 
 TEST_F(Px4GatewayPublishCacheTest, InitSubscribesAndUpdatesCacheFromPx4Topics) {
   auto cache = std::make_shared<Px4MsgsCache>();
-  auto gateway = std::make_shared<PX4Gateway>(rclcpp::NodeOptions(), cache);
+  auto gateway =
+      std::make_shared<PX4Gateway>(MakeGatewayTestOptions(), cache);
   auto px4_source =
       std::make_shared<rclcpp::Node>("px4_gateway_test_px4_source");
 
@@ -545,7 +555,8 @@ TEST_F(Px4GatewayPublishCacheTest, InitSubscribesAndUpdatesCacheFromPx4Topics) {
 
 TEST_F(Px4GatewayPublishCacheTest, OffboardControlModeReflectsChosenFlags) {
   auto cache = std::make_shared<Px4MsgsCache>();
-  auto gateway = std::make_shared<PX4Gateway>(rclcpp::NodeOptions(), cache);
+  auto gateway =
+      std::make_shared<PX4Gateway>(MakeGatewayTestOptions(), cache);
   auto listener = std::make_shared<OffboardControlModeListener>();
 
   rclcpp::executors::SingleThreadedExecutor exec;
