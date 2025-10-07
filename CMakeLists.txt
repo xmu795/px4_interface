@@ -44,6 +44,21 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 # ============================= 公共头文件基路径变量 =============================
 set(PROJECT_PUBLIC_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+#============================== process_manager 库 =============================
+add_library(process_manager
+  src/process_manager.cpp
+)
+target_include_directories(process_manager
+  PUBLIC
+    $<BUILD_INTERFACE:${PROJECT_PUBLIC_INCLUDE_DIR}>
+    $<INSTALL_INTERFACE:include>
+)
+
+# 这里不需要额外依赖
+target_compile_options(process_manager
+  PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang>:-Wconversion -Wshadow>
+)
+
 # ============================= px4_msgs_cache 库 =============================
 add_library(px4_msgs_cache
   src/px4_msgs_cache.cpp
@@ -112,6 +127,7 @@ add_dependencies(px4_gateway ${PROJECT_NAME}__cpp)
 # 安装库到 lib；安装头文件到 include；
 # 根据 ROS 2 约定放在 lib/${PROJECT_NAME} 不是必须——对纯库包可直接放 lib。
 install(TARGETS
+  process_manager
   px4_msgs_cache
   px4_gateway
   EXPORT ${PROJECT_NAME}-targets           # 导出安装时的 target 描述，便于外部 find_package
@@ -169,6 +185,12 @@ if(BUILD_TESTING)
     target_link_libraries(test_px4_gateway ${cpp_typesupport_target})
     ament_target_dependencies(test_px4_gateway rclcpp std_msgs Eigen3 px4_msgs rosidl_default_runtime)
     add_dependencies(test_px4_gateway ${PROJECT_NAME}__cpp)
+  endif()
+
+  ament_add_gtest(test_process_manager test/test_process_manager.cpp)
+  if(TARGET test_process_manager)
+    target_link_libraries(test_process_manager process_manager)
+    target_include_directories(test_process_manager PRIVATE ${PROJECT_PUBLIC_INCLUDE_DIR})
   endif()
 endif()
 
