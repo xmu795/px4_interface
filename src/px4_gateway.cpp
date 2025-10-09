@@ -202,7 +202,7 @@ void PX4Gateway::init() {
   auto qos_profile = rclcpp::SystemDefaultsQoS();
   vehicle_status_subscriber_ =
       this->create_subscription<px4_msgs::msg::VehicleStatus>(
-          "/fmu/out/vehicle_status", qos_profile,
+          "/fmu/out/vehicle_status_v1", qos_profile,
           [this](const px4_msgs::msg::VehicleStatus::SharedPtr msg) {
             px4Status::VehicleStatus status;
             const auto timestamps =

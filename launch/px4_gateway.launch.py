@@ -13,12 +13,14 @@ def generate_launch_description():
             '-b', '921600'
         ],
         name='microxrce_agent',
+        output='log'
     )
 
     px4_gateway_node = Node(
         package='px4_interface',
         executable='px4_gateway_node',
         name='px4_gateway_node',
+        output='log'
     )
 
     uav_dashboard_process = ExecuteProcess(
