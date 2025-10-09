@@ -23,9 +23,7 @@ constexpr uint64_t kMicrosToNanos = 1000ULL;
 
 PX4Gateway::PX4Gateway(const rclcpp::NodeOptions& options,
                        std::shared_ptr<Px4MsgsCache> cache)
-    : Node("PX4_Gateway", options),
-      px4_msgs_cache_(std::move(cache)),
-      dds_agent_process_(agent_executable_, agent_args_) {
+    : Node("PX4_Gateway", options), px4_msgs_cache_(std::move(cache)) {
   if (px4_msgs_cache_ == nullptr) {
     throw std::invalid_argument("Px4MsgsCache pointer cannot be null");
   }
@@ -177,14 +175,6 @@ PX4Gateway::Px4Timestamps PX4Gateway::processPx4Timestamp(
 void PX4Gateway::init() {
   // Tests:
   // Px4GatewayPublishCacheTest.InitSubscribesAndUpdatesCacheFromPx4Topics
-  // 启动MicroDDS Agent进程
-  if (!dds_agent_process_.start()) {
-    RCLCPP_ERROR(this->get_logger(), "Failed to start MicroDDS Agent process");
-    throw std::runtime_error("Failed to start MicroDDS Agent process");
-  } else {
-    RCLCPP_INFO(this->get_logger(), "MicroDDS Agent process started");
-  }
-
   // （验证订阅回调将 PX4 消息写入 Px4MsgsCache）。
   // 提供给PX4的发布者
   offboard_control_mode_publisher_ =
